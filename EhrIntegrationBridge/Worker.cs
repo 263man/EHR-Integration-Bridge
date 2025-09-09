@@ -1,90 +1,59 @@
 using Hl7.Fhir.Rest;
-using Hl7.Fhir.Model;
-// This alias resolves the name collision between our old Patient class and the FHIR Patient model.
 using FhirPatient = Hl7.Fhir.Model.Patient;
 
 namespace EhrIntegrationBridge;
 
 public class Worker(ILogger<Worker> logger) : BackgroundService
 {
-    private const string OpenEmrFhirEndpoint = "http://openemr/apis/default/fhir";
+    private const string FhirServerEndpoint = "http://hapi.fhir.org/baseR4";
 
     protected override async System.Threading.Tasks.Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("--- EHR BRIDGE WORKER STARTING (FHIR EXTRACTION MODE) ---");
+        logger.LogInformation("--- EHR BRIDGE WORKER STARTING (PUBLIC FHIR SERVER MODE) ---");
 
-        if (!await WaitForFhirEndpointAsync(stoppingToken))
-        {
-            logger.LogCritical("FHIR endpoint did not become available. Shutting down.");
-            return;
-        }
+        await System.Threading.Tasks.Task.Delay(5000, stoppingToken);
 
         try
         {
-            logger.LogInformation("--- Connecting to FHIR endpoint at {Endpoint} ---", OpenEmrFhirEndpoint);
-            var fhirClient = new FhirClient(OpenEmrFhirEndpoint)
+            var fhirClient = new FhirClient(FhirServerEndpoint)
             {
-                Settings = { VerifyFhirVersion = false }
+                Settings = { VerifyFhirVersion = false, PreferredFormat = Hl7.Fhir.Rest.ResourceFormat.Json }
             };
 
-            logger.LogInformation("--- Attempting to read Patient with ID '1' ---");
+            logger.LogInformation("--- Searching for Patient resources on public server: {Endpoint} ---", FhirServerEndpoint);
             
-            var patient = await fhirClient.ReadAsync<FhirPatient>("Patient/1");
-
-            if (patient != null)
+            var searchParams = new SearchParams().LimitTo(15);
+            var result = await fhirClient.SearchAsync<FhirPatient>(searchParams, stoppingToken);
+            
+            // This more robust check will satisfy the compiler and prevent any possibility of a null reference crash.
+            if (result?.Entry is not null && result.Entry.Any())
             {
-                var patientName = patient.Name.FirstOrDefault();
-                var fullName = $"{patientName?.Given.FirstOrDefault()} {patientName?.Family}";
-                
-                logger.LogInformation("✅ --- FHIR READ SUCCESS ---");
-                logger.LogInformation("   - ID: {PatientId}", patient.Id);
-                logger.LogInformation("   - Name: {PatientName}", fullName.Trim());
-                logger.LogInformation("   - DoB: {PatientBirthDate}", patient.BirthDate);
+                logger.LogInformation("✅ --- FHIR SEARCH COMPLETE ---");
+                logger.LogInformation("   - Found {Count} Patient resources.", result.Entry.Count);
+                logger.LogInformation("--- Displaying patients (with robust name handling) ---");
+
+                foreach (var entry in result.Entry)
+                {
+                    if (entry.Resource is FhirPatient patient)
+                    {
+                        var patientName = patient.Name.FirstOrDefault();
+                        string givenNames = (patientName?.Given.Any() == true) ? string.Join(" ", patientName.Given) : "[NO GIVEN NAME]";
+                        string familyName = patientName?.Family ?? "[NO FAMILY NAME]";
+                        string fullName = $"{givenNames} {familyName}";
+                        
+                        logger.LogInformation("   -> Patient: {PatientName} (ID: {PatientId})", fullName.Trim(), patient.Id);
+                    }
+                }
             }
             else
             {
-                logger.LogWarning("--- FHIR READ FAILED: Patient with ID '1' not found. ---");
+                logger.LogInformation("✅ --- FHIR SEARCH COMPLETE ---");
+                logger.LogInformation("   - Found 0 Patient resources.");
             }
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "An unexpected error occurred during FHIR interaction.");
         }
-    }
-
-    private async System.Threading.Tasks.Task<bool> WaitForFhirEndpointAsync(CancellationToken stoppingToken)
-    {
-        var attempt = 0;
-        using var httpClient = new HttpClient();
-        var metadataUrl = $"{OpenEmrFhirEndpoint}/metadata";
-
-        while (stoppingToken.IsCancellationRequested == false)
-        {
-            try
-            {
-                attempt++;
-                logger.LogInformation("Attempting to connect to FHIR metadata endpoint... (Attempt {attempt})", attempt);
-                var response = await httpClient.GetAsync(metadataUrl, stoppingToken);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    logger.LogInformation("✅ FHIR endpoint is responsive.");
-                    return true;
-                }
-                logger.LogWarning("FHIR endpoint returned non-success status: {StatusCode}", response.StatusCode);
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning("FHIR endpoint connection failed. Error: {ErrorMessage}", ex.Message.Split(Environment.NewLine)[0]);
-            }
-
-            if (attempt >= 30)
-            {
-                logger.LogError("Could not connect to the FHIR endpoint after multiple attempts.");
-                return false;
-            }
-            await System.Threading.Tasks.Task.Delay(5000, stoppingToken);
-        }
-        return false;
     }
 }

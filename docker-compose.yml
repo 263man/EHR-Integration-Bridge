@@ -1,42 +1,41 @@
+version: '3.8'
+
 services:
-  mariadb:
-    image: mariadb:10.6
-    restart: always
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: openemr
-      MYSQL_USER: openemr
-      MYSQL_PASSWORD: openemrpass
-    volumes:
-      - mariadb-data:/var/lib/mysql
-    networks:
-      - ehr_network
-
-  openemr:
-    image: openemr/openemr:7.0.0 
-    restart: always
-    ports:
-      - "80:80"
-    command: ["/bin/sh", "-c", "chmod +x ./openemr.sh && ./openemr.sh"]
-    depends_on:
-      - mariadb
-    environment:
-      MYSQL_HOST: mariadb
-      MYSQL_ROOT_USER: root
-      MYSQL_ROOT_PASS: rootpass
-      MYSQL_USER: openemr
-      MYSQL_PASS: openemrpass
-      OE_SITE_ID: default
-    volumes:
-      - openemr-logs:/var/log
-      - openemr-sites:/var/www/localhost/htdocs/openemr/sites
-    networks:
-      - ehr_network
-
+  # The .NET application that connects to the public FHIR server
   ehr-bridge-app:
     build: .
-    depends_on:
-      - mariadb
+    networks:
+      - ehr_network
+
+  # The OpenEMR container, used only for visual demonstration
+  openemr:
+    image: openemr/openemr:7.0.0
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - openemr-logs:/var/log
+      - openemr-sites:/var/www/localhost/htdocs/openemr/sites
+    environment:
+      - MYSQL_HOST=mariadb
+      - MYSQL_ROOT_PASS=rootpass
+      - MYSQL_USER=openemr
+      - MYSQL_PASS=openemrpass
+      - MYSQL_DATABASE=openemr
+    networks:
+      - ehr_network
+
+  # The database for the OpenEMR visual asset
+  mariadb:
+    image: mariadb:10.6
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass
+      - MYSQL_DATABASE=openemr
+      - MYSQL_USER=openemr
+      - MYSQL_PASSWORD=openemrpass
     networks:
       - ehr_network
 
