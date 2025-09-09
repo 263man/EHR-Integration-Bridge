@@ -1,0 +1,50 @@
+services:
+  mariadb:
+    image: mariadb:10.6
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: openemr
+      MYSQL_USER: openemr
+      MYSQL_PASSWORD: openemrpass
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    networks:
+      - ehr_network
+
+  openemr:
+    image: openemr/openemr:7.0.0 
+    restart: always
+    ports:
+      - "80:80"
+    command: ["/bin/sh", "-c", "chmod +x ./openemr.sh && ./openemr.sh"]
+    depends_on:
+      - mariadb
+    environment:
+      MYSQL_HOST: mariadb
+      MYSQL_ROOT_USER: root
+      MYSQL_ROOT_PASS: rootpass
+      MYSQL_USER: openemr
+      MYSQL_PASS: openemrpass
+      OE_SITE_ID: default
+    volumes:
+      - openemr-logs:/var/log
+      - openemr-sites:/var/www/localhost/htdocs/openemr/sites
+    networks:
+      - ehr_network
+
+  ehr-bridge-app:
+    build: .
+    depends_on:
+      - mariadb
+    networks:
+      - ehr_network
+
+networks:
+  ehr_network:
+    driver: bridge
+
+volumes:
+  mariadb-data:
+  openemr-logs:
+  openemr-sites:

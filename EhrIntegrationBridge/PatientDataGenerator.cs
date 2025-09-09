@@ -1,10 +1,9 @@
 ﻿using Bogus;
-
 namespace EhrIntegrationBridge;
 
-public class Patient
+public class Patient 
 {
-    public int PatientId { get; set; }
+    public long Pid { get; set; }
     public string FirstName { get; set; } = string.Empty;
     public string LastName { get; set; } = string.Empty;
     public DateTime DateOfBirth { get; set; }
@@ -16,13 +15,13 @@ public class Patient
     public string PhoneNumber { get; set; } = string.Empty;
 }
 
-public static class PatientDataGenerator
+public static class PatientDataGenerator 
 {
-    public static List<Patient> GeneratePatients(int count)
+    public static List<Patient> GeneratePatients(int count) 
     {
         int patientIdSeed = 1;
         var patientFaker = new Faker<Patient>()
-            .RuleFor(p => p.PatientId, f => patientIdSeed++)
+            .RuleFor(p => p.Pid, f => patientIdSeed++)
             .RuleFor(p => p.FirstName, f => f.Name.FirstName())
             .RuleFor(p => p.LastName, f => f.Name.LastName())
             .RuleFor(p => p.DateOfBirth, f => f.Date.Past(50, DateTime.Now.AddYears(-18)))
@@ -32,7 +31,7 @@ public static class PatientDataGenerator
             .RuleFor(p => p.State, f => f.Address.StateAbbr())
             .RuleFor(p => p.PostalCode, f => f.Address.ZipCode())
             .RuleFor(p => p.PhoneNumber, f => f.Phone.PhoneNumber());
-
+        
         return patientFaker.Generate(count);
     }
 }
