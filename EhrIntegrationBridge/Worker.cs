@@ -1,4 +1,6 @@
 using Hl7.Fhir.Rest;
+using CsvHelper;
+using System.Globalization;
 using FhirPatient = Hl7.Fhir.Model.Patient;
 
 namespace EhrIntegrationBridge;
@@ -9,7 +11,7 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
 
     protected override async System.Threading.Tasks.Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("--- EHR BRIDGE WORKER STARTING (PUBLIC FHIR SERVER MODE) ---");
+        logger.LogInformation("--- EHR BRIDGE WORKER STARTING (CSV GENERATION MODE) ---");
 
         await System.Threading.Tasks.Task.Delay(5000, stoppingToken);
 
@@ -20,40 +22,53 @@ public class Worker(ILogger<Worker> logger) : BackgroundService
                 Settings = { VerifyFhirVersion = false, PreferredFormat = Hl7.Fhir.Rest.ResourceFormat.Json }
             };
 
-            logger.LogInformation("--- Searching for Patient resources on public server: {Endpoint} ---", FhirServerEndpoint);
+            logger.LogInformation("--- Searching for Patient resources on {Endpoint} ---", FhirServerEndpoint);
             
-            var searchParams = new SearchParams().LimitTo(15);
+            var searchParams = new SearchParams().LimitTo(50);
             var result = await fhirClient.SearchAsync<FhirPatient>(searchParams, stoppingToken);
             
-            // This more robust check will satisfy the compiler and prevent any possibility of a null reference crash.
+            var cleanRecords = new List<CleanPatientRecord>();
+            
             if (result?.Entry is not null && result.Entry.Any())
             {
-                logger.LogInformation("✅ --- FHIR SEARCH COMPLETE ---");
-                logger.LogInformation("   - Found {Count} Patient resources.", result.Entry.Count);
-                logger.LogInformation("--- Displaying patients (with robust name handling) ---");
-
+                logger.LogInformation("--- Transforming {Count} FHIR Patient resources... ---", result.Entry.Count);
                 foreach (var entry in result.Entry)
                 {
                     if (entry.Resource is FhirPatient patient)
                     {
                         var patientName = patient.Name.FirstOrDefault();
-                        string givenNames = (patientName?.Given.Any() == true) ? string.Join(" ", patientName.Given) : "[NO GIVEN NAME]";
-                        string familyName = patientName?.Family ?? "[NO FAMILY NAME]";
-                        string fullName = $"{givenNames} {familyName}";
-                        
-                        logger.LogInformation("   -> Patient: {PatientName} (ID: {PatientId})", fullName.Trim(), patient.Id);
+                        cleanRecords.Add(new CleanPatientRecord
+                        {
+                            PatientId = patient.Id,
+                            FirstName = (patientName?.Given.Any() == true) ? string.Join(" ", patientName.Given) : "[MISSING]",
+                            LastName = patientName?.Family ?? "[MISSING]",
+                            DateOfBirth = patient.BirthDate,
+                            Gender = patient.Gender?.ToString() ?? "[MISSING]"
+                        });
                     }
                 }
+                logger.LogInformation("✅ Data transformation complete.");
+
+                // --- NEW: Write the clean records to a CSV file ---
+                var outputPath = Path.Combine("output", "Clean_Claims_Export.csv");
+                Directory.CreateDirectory("output"); // Ensure the directory exists
+
+                using (var writer = new StreamWriter(outputPath))
+                using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+                {
+                    csv.WriteRecords(cleanRecords);
+                }
+                logger.LogInformation("✅ --- CSV FILE GENERATED ---");
+                logger.LogInformation("   - Successfully wrote {Count} records to {Path}", cleanRecords.Count, outputPath);
             }
             else
             {
-                logger.LogInformation("✅ --- FHIR SEARCH COMPLETE ---");
-                logger.LogInformation("   - Found 0 Patient resources.");
+                logger.LogInformation("--- Found 0 Patient resources to process. ---");
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "An unexpected error occurred during FHIR interaction.");
+            logger.LogError(ex, "An unexpected error occurred during the process.");
         }
     }
 }

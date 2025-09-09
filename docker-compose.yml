@@ -1,11 +1,12 @@
-version: '3.8'
-
 services:
   # The .NET application that connects to the public FHIR server
   ehr-bridge-app:
     build: .
     networks:
       - ehr_network
+    # This new section makes the CSV file appear in your project folder
+    volumes:
+      - ./output:/app/output
 
   # The OpenEMR container, used only for visual demonstration
   openemr:
