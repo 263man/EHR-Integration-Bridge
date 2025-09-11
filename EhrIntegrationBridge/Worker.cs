@@ -1,74 +1,171 @@
-using Hl7.Fhir.Rest;
 using CsvHelper;
+using MySqlConnector;
 using System.Globalization;
-using FhirPatient = Hl7.Fhir.Model.Patient;
 
 namespace EhrIntegrationBridge;
 
 public class Worker(ILogger<Worker> logger) : BackgroundService
 {
-    private const string FhirServerEndpoint = "http://hapi.fhir.org/baseR4";
-
     protected override async System.Threading.Tasks.Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation("--- EHR BRIDGE WORKER STARTING (CSV GENERATION MODE) ---");
+        var workerMode = Environment.GetEnvironmentVariable("WORKER_MODE") ?? "Extract";
+        logger.LogInformation("--- EHR BRIDGE WORKER STARTING ---");
+        logger.LogInformation("   - Mode: {Mode}", workerMode);
 
-        await System.Threading.Tasks.Task.Delay(5000, stoppingToken);
+        if (!await WaitForDatabaseAsync(stoppingToken))
+        {
+            logger.LogCritical("Local database did not become available. Shutting down.");
+            return;
+        }
+
+        if (workerMode.Equals("Sync", StringComparison.OrdinalIgnoreCase))
+        {
+            await RunSyncAndSeedLogicAsync(stoppingToken);
+        }
+        else
+        {
+            await RunDataQualityAuditAsync(stoppingToken);
+        }
+        
+        logger.LogInformation("--- EHR BRIDGE WORKER FINISHED ---");
+    }
+
+    private async System.Threading.Tasks.Task RunDataQualityAuditAsync(CancellationToken stoppingToken)
+    {
+        logger.LogInformation("--- Starting Data Quality Audit on local OpenEMR database ---");
+        var allPatients = new List<CleanPatientRecord>();
+        var incompleteRecords = new List<IncompleteDemographicRecord>();
 
         try
         {
-            var fhirClient = new FhirClient(FhirServerEndpoint)
-            {
-                Settings = { VerifyFhirVersion = false, PreferredFormat = Hl7.Fhir.Rest.ResourceFormat.Json }
-            };
+            var connectionString = "server=mariadb;port=3306;database=openemr;user=openemr;password=openemrpass;SslMode=None;";
+            await using var connection = new MySqlConnection(connectionString);
+            await connection.OpenAsync(stoppingToken);
 
-            logger.LogInformation("--- Searching for Patient resources on {Endpoint} ---", FhirServerEndpoint);
-            
-            var searchParams = new SearchParams().LimitTo(50);
-            var result = await fhirClient.SearchAsync<FhirPatient>(searchParams, stoppingToken);
-            
-            var cleanRecords = new List<CleanPatientRecord>();
-            
-            if (result?.Entry is not null && result.Entry.Any())
+            var command = new MySqlCommand("SELECT pid, fname, lname, DOB, sex, phone_cell, street FROM patient_data WHERE pid > 0;", connection);
+            await using var reader = await command.ExecuteReaderAsync(stoppingToken);
+
+            while (await reader.ReadAsync(stoppingToken))
             {
-                logger.LogInformation("--- Transforming {Count} FHIR Patient resources... ---", result.Entry.Count);
-                foreach (var entry in result.Entry)
+                var patientId = reader.GetInt64("pid");
+                var firstName = reader.GetString("fname");
+                var lastName = reader.GetString("lname");
+                var dob = reader.GetDateTime("DOB").ToString("yyyy-MM-dd");
+                var gender = reader.GetString("sex");
+                var phone = reader.GetString("phone_cell");
+                var street = reader.GetString("street");
+
+                // Add to the full export list
+                allPatients.Add(new CleanPatientRecord { PatientId = patientId, FirstName = firstName, LastName = lastName, DateOfBirth = dob, Gender = gender, PhoneNumber = phone });
+
+                // Business Logic: Find patients with missing data
+                if (string.IsNullOrEmpty(street) || string.IsNullOrEmpty(phone))
                 {
-                    if (entry.Resource is FhirPatient patient)
+                    incompleteRecords.Add(new IncompleteDemographicRecord
                     {
-                        var patientName = patient.Name.FirstOrDefault();
-                        cleanRecords.Add(new CleanPatientRecord
-                        {
-                            PatientId = patient.Id,
-                            FirstName = (patientName?.Given.Any() == true) ? string.Join(" ", patientName.Given) : "[MISSING]",
-                            LastName = patientName?.Family ?? "[MISSING]",
-                            DateOfBirth = patient.BirthDate,
-                            Gender = patient.Gender?.ToString() ?? "[MISSING]"
-                        });
-                    }
+                        PatientId = patientId,
+                        FirstName = firstName,
+                        LastName = lastName,
+                        MissingDataFlag = string.IsNullOrEmpty(street) ? "Missing Address" : "Missing Phone"
+                    });
                 }
-                logger.LogInformation("✅ Data transformation complete.");
-
-                // --- NEW: Write the clean records to a CSV file ---
-                var outputPath = Path.Combine("output", "Clean_Claims_Export.csv");
-                Directory.CreateDirectory("output"); // Ensure the directory exists
-
-                using (var writer = new StreamWriter(outputPath))
-                using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
-                {
-                    csv.WriteRecords(cleanRecords);
-                }
-                logger.LogInformation("✅ --- CSV FILE GENERATED ---");
-                logger.LogInformation("   - Successfully wrote {Count} records to {Path}", cleanRecords.Count, outputPath);
             }
-            else
+            logger.LogInformation("✅ Analysis complete. Found {Count} records with incomplete demographics.", incompleteRecords.Count);
+
+            // Write the full, clean export
+            var fullExportPath = Path.Combine("output", "Full_Patient_Export.csv");
+            Directory.CreateDirectory("output");
+            await using (var writer = new StreamWriter(fullExportPath))
+            await using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
             {
-                logger.LogInformation("--- Found 0 Patient resources to process. ---");
+                await csv.WriteRecordsAsync(allPatients, stoppingToken);
             }
+            logger.LogInformation("   - Successfully wrote {Count} total records to {Path}", allPatients.Count, fullExportPath);
+
+            // Write the actionable audit list
+            var auditListPath = Path.Combine("output", "Incomplete_Demographics_Audit_List.csv");
+            await using (var writer = new StreamWriter(auditListPath))
+            await using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+            {
+                await csv.WriteRecordsAsync(incompleteRecords, stoppingToken);
+            }
+            logger.LogInformation("✅ --- AUDIT REPORT GENERATED ---");
+            logger.LogInformation("   - Successfully wrote {Count} actionable records to {Path}", incompleteRecords.Count, auditListPath);
+
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "An unexpected error occurred during the process.");
+            logger.LogError(ex, "An error occurred during the data quality audit.");
         }
+    }
+
+    private async System.Threading.Tasks.Task RunSyncAndSeedLogicAsync(CancellationToken stoppingToken)
+    {
+        logger.LogInformation("--- Seeding local OpenEMR with new, messy patient data... ---");
+        try 
+        {
+            var patientsToCreate = PatientDataGenerator.GeneratePatients(1000);
+            var connectionString = "server=mariadb;port=3306;database=openemr;user=openemr;password=openemrpass;SslMode=None;";
+            await using var connection = new MySqlConnection(connectionString);
+            await connection.OpenAsync(stoppingToken);
+            
+            var deleteCmd = new MySqlCommand("DELETE FROM patient_data WHERE pid > 0;", connection);
+            await deleteCmd.ExecuteNonQueryAsync(stoppingToken);
+
+            foreach (var patient in patientsToCreate) 
+            {
+                if (stoppingToken.IsCancellationRequested) break;
+                var command = new MySqlCommand(
+                    "INSERT INTO patient_data (pid, fname, lname, DOB, sex, street, city, state, postal_code, phone_cell) " +
+                    "VALUES (@pid, @fname, @lname, @dob, @sex, @street, @city, @state, @postal_code, @phone);",
+                    connection);
+                
+                command.Parameters.AddWithValue("@pid", patient.Pid);
+                command.Parameters.AddWithValue("@fname", patient.FirstName);
+                command.Parameters.AddWithValue("@lname", patient.LastName);
+                command.Parameters.AddWithValue("@dob", patient.DateOfBirth);
+                command.Parameters.AddWithValue("@sex", patient.Gender);
+                command.Parameters.AddWithValue("@street", patient.StreetAddress);
+                command.Parameters.AddWithValue("@city", patient.City);
+                command.Parameters.AddWithValue("@state", patient.State);
+                command.Parameters.AddWithValue("@postal_code", patient.PostalCode);
+                command.Parameters.AddWithValue("@phone", patient.PhoneNumber);
+                
+                await command.ExecuteNonQueryAsync(stoppingToken);
+            }
+            logger.LogInformation("✅ --- DATA SEEDING COMPLETE: {count} patients created in OpenEMR. ---", patientsToCreate.Count);
+        } 
+        catch (Exception ex) 
+        {
+            logger.LogError(ex, "An error occurred while seeding the local database.");
+        }
+    }
+
+    private async System.Threading.Tasks.Task<bool> WaitForDatabaseAsync(CancellationToken stoppingToken) 
+    {
+        logger.LogInformation("Waiting for local database service to be ready...");
+        var connectionString = "server=mariadb;port=3306;database=openemr;user=openemr;password=openemrpass;SslMode=None;";
+        var attempt = 0;
+        while (stoppingToken.IsCancellationRequested == false) 
+        {
+            try 
+            {
+                attempt++;
+                await using var connection = new MySqlConnection(connectionString);
+                await connection.OpenAsync(stoppingToken);
+                logger.LogInformation("✅ Database connection successful.");
+                return true;
+            } 
+            catch (Exception) 
+            {
+                if (attempt >= 30) 
+                {
+                    logger.LogError("Could not connect to the database after 30 attempts.");
+                    return false; 
+                }
+                await System.Threading.Tasks.Task.Delay(5000, stoppingToken);
+            }
+        }
+        return false;
     }
 }

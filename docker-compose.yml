@@ -1,14 +1,14 @@
 services:
-  # The .NET application that connects to the public FHIR server
   ehr-bridge-app:
     build: .
     networks:
       - ehr_network
-    # This new section makes the CSV file appear in your project folder
     volumes:
       - ./output:/app/output
+    
+    environment:
+      - WORKER_MODE=Extract #  'Sync' or 'Extract'
 
-  # The OpenEMR container, used only for visual demonstration
   openemr:
     image: openemr/openemr:7.0.0
     ports:
@@ -27,7 +27,6 @@ services:
     networks:
       - ehr_network
 
-  # The database for the OpenEMR visual asset
   mariadb:
     image: mariadb:10.6
     volumes:

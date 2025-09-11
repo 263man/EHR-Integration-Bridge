@@ -26,11 +26,12 @@ public static class PatientDataGenerator
             .RuleFor(p => p.LastName, f => f.Name.LastName())
             .RuleFor(p => p.DateOfBirth, f => f.Date.Past(50, DateTime.Now.AddYears(-18)))
             .RuleFor(p => p.Gender, f => f.PickRandom("Male", "Female", "Other"))
-            .RuleFor(p => p.StreetAddress, f => f.Address.StreetAddress())
+            // Make some data intentionally incomplete
+            .RuleFor(p => p.StreetAddress, f => f.Random.Bool(0.8f) ? f.Address.StreetAddress() : string.Empty) 
             .RuleFor(p => p.City, f => f.Address.City())
             .RuleFor(p => p.State, f => f.Address.StateAbbr())
             .RuleFor(p => p.PostalCode, f => f.Address.ZipCode())
-            .RuleFor(p => p.PhoneNumber, f => f.Phone.PhoneNumber());
+            .RuleFor(p => p.PhoneNumber, f => f.Random.Bool(0.8f) ? f.Phone.PhoneNumber() : string.Empty);
         
         return patientFaker.Generate(count);
     }
