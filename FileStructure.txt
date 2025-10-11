@@ -1,5 +1,36 @@
 .
 ├── Dockerfile
+├── EhrBridge.Api
+│   ├── Data
+│   │   ├── AuditResultDto.cs
+│   │   └── IncompleteRecordDto.cs
+│   ├── EhrBridge.Api.csproj
+│   ├── EhrBridge.Api.http
+│   ├── Program.cs
+│   ├── Properties
+│   │   └── launchSettings.json
+│   ├── WeatherForecast.cs
+│   ├── appsettings.Development.json
+│   ├── appsettings.json
+│   ├── bin
+│   │   └── Debug
+│   │       └── net8.0
+│   └── obj
+│       ├── Debug
+│       │   └── net8.0
+│       │       ├── EhrBridge.Api.AssemblyInfo.cs
+│       │       ├── EhrBridge.Api.AssemblyInfoInputs.cache
+│       │       ├── EhrBridge.Api.GeneratedMSBuildEditorConfig.editorconfig
+│       │       ├── EhrBridge.Api.GlobalUsings.g.cs
+│       │       ├── EhrBridge.Api.assets.cache
+│       │       ├── EhrBridge.Api.csproj.AssemblyReference.cache
+│       │       ├── ref
+│       │       └── refint
+│       ├── EhrBridge.Api.csproj.nuget.dgspec.json
+│       ├── EhrBridge.Api.csproj.nuget.g.props
+│       ├── EhrBridge.Api.csproj.nuget.g.targets
+│       ├── project.assets.json
+│       └── project.nuget.cache
 ├── EhrIntegrationBridge
 │   ├── CleanPatientRecord.cs
 │   ├── EhrIntegrationBridge.csproj
@@ -82,4 +113,4 @@
     ├── Full_Patient_Export.csv
     └── Incomplete_Demographics_Audit_List.csv
 
-21 directories, 62 files
+32 directories, 82 files
