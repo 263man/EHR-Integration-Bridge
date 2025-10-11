@@ -1,0 +1,85 @@
+.
+├── Dockerfile
+├── EhrIntegrationBridge
+│   ├── CleanPatientRecord.cs
+│   ├── EhrIntegrationBridge.csproj
+│   ├── IncompleteDemographicRecord.cs
+│   ├── PatientDataGenerator.cs
+│   ├── Program.cs
+│   ├── Properties
+│   │   └── launchSettings.json
+│   ├── Worker.cs
+│   ├── appsettings.Development.json
+│   ├── appsettings.json
+│   ├── bin
+│   │   └── Debug
+│   │       └── net8.0
+│   └── obj
+│       ├── Debug
+│       │   └── net8.0
+│       │       ├── EhrIntegrationBridge.AssemblyInfo.cs
+│       │       ├── EhrIntegrationBridge.AssemblyInfoInputs.cache
+│       │       ├── EhrIntegrationBridge.GeneratedMSBuildEditorConfig.editorconfig
+│       │       ├── EhrIntegrationBridge.GlobalUsings.g.cs
+│       │       ├── EhrIntegrationBridge.assets.cache
+│       │       ├── EhrIntegrationBridge.csproj.AssemblyReference.cache
+│       │       ├── ref
+│       │       └── refint
+│       ├── EhrIntegrationBridge.csproj.nuget.dgspec.json
+│       ├── EhrIntegrationBridge.csproj.nuget.g.props
+│       ├── EhrIntegrationBridge.csproj.nuget.g.targets
+│       ├── project.assets.json
+│       └── project.nuget.cache
+├── EhrIntegrationBridge.sln
+├── FileStructure.txt
+├── Hapi_Fhir_Patient_Export.csv
+├── docker-compose.yml
+├── fhir-evidence
+│   ├── FhirEvidenceGenerator.csproj
+│   ├── FhirPatientRecord.cs
+│   ├── Program.cs
+│   ├── bin
+│   │   └── Debug
+│   │       └── net8.0
+│   │           ├── CsvHelper.dll
+│   │           ├── Fhir.Metrics.dll
+│   │           ├── FhirEvidenceGenerator
+│   │           ├── FhirEvidenceGenerator.deps.json
+│   │           ├── FhirEvidenceGenerator.dll
+│   │           ├── FhirEvidenceGenerator.pdb
+│   │           ├── FhirEvidenceGenerator.runtimeconfig.json
+│   │           ├── Hl7.Fhir.Base.dll
+│   │           ├── Hl7.Fhir.Conformance.dll
+│   │           ├── Hl7.Fhir.R4.dll
+│   │           └── Newtonsoft.Json.dll
+│   └── obj
+│       ├── Debug
+│       │   └── net8.0
+│       │       ├── FhirEvid.F0AAEA17.Up2Date
+│       │       ├── FhirEvidenceGenerator.AssemblyInfo.cs
+│       │       ├── FhirEvidenceGenerator.AssemblyInfoInputs.cache
+│       │       ├── FhirEvidenceGenerator.GeneratedMSBuildEditorConfig.editorconfig
+│       │       ├── FhirEvidenceGenerator.GlobalUsings.g.cs
+│       │       ├── FhirEvidenceGenerator.assets.cache
+│       │       ├── FhirEvidenceGenerator.csproj.AssemblyReference.cache
+│       │       ├── FhirEvidenceGenerator.csproj.CoreCompileInputs.cache
+│       │       ├── FhirEvidenceGenerator.csproj.FileListAbsolute.txt
+│       │       ├── FhirEvidenceGenerator.dll
+│       │       ├── FhirEvidenceGenerator.genruntimeconfig.cache
+│       │       ├── FhirEvidenceGenerator.pdb
+│       │       ├── FhirEvidenceGenerator.sourcelink.json
+│       │       ├── apphost
+│       │       ├── ref
+│       │       │   └── FhirEvidenceGenerator.dll
+│       │       └── refint
+│       │           └── FhirEvidenceGenerator.dll
+│       ├── FhirEvidenceGenerator.csproj.nuget.dgspec.json
+│       ├── FhirEvidenceGenerator.csproj.nuget.g.props
+│       ├── FhirEvidenceGenerator.csproj.nuget.g.targets
+│       ├── project.assets.json
+│       └── project.nuget.cache
+└── output
+    ├── Full_Patient_Export.csv
+    └── Incomplete_Demographics_Audit_List.csv
+
+21 directories, 62 files
