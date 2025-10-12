@@ -1,35 +1,59 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import './App.css';
+import useAuditData from './hooks/useAuditData';
 
 function App() {
-  const [count, setCount] = useState(0)
+  // Use the custom hook to fetch data
+  const { data, loading, error } = useAuditData();
+
+  if (loading) {
+    return <div className="app-container"><h1>Loading Audit Report...</h1></div>;
+  }
+
+  if (error) {
+    return <div className="app-container error">
+      <h1>Error Fetching Data!</h1>
+      <p>Error: {error}</p>
+      <p>Make sure the Docker stack is running: <strong>docker compose up --build -d</strong></p>
+    </div>;
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="app-container">
+      <h1>EHR Data Audit Dashboard</h1>
+      
+      <div className="summary-cards">
+        <div className="card">
+          <h2>Total Records Scanned</h2>
+          <p className="metric">{data.totalRecordsScanned}</p>
+        </div>
+        <div className="card alert">
+          <h2>Incomplete Records Found</h2>
+          <p className="metric">{data.incompleteRecordsFound}</p>
+        </div>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+
+      <h2>Incomplete Demographics List ({data.incompleteRecords.length})</h2>
+      
+      <table className="audit-table">
+        <thead>
+          <tr>
+            <th>Patient ID</th>
+            <th>Field</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.incompleteRecords.map((record, index) => (
+            <tr key={index}>
+              <td>{record.patientId}</td>
+              <td>{record.field}</td>
+              <td>{record.description}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
-export default App
+export default App;
