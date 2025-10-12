@@ -1,49 +1,70 @@
+version: '3.4'
+
 services:
-  ehr-bridge-app:
-    build: .
-    networks:
-      - ehr_network
-    volumes:
-      - ./output:/app/output
-    
-    environment:
-      - WORKER_MODE=Extract #  'Sync' or 'Extract'
-
-  openemr:
-    image: openemr/openemr:7.0.0
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - mariadb-data:/var/lib/mysql
-      - openemr-logs:/var/log
-      - openemr-sites:/var/www/localhost/htdocs/openemr/sites
-    environment:
-      - MYSQL_HOST=mariadb
-      - MYSQL_ROOT_PASS=rootpass
-      - MYSQL_USER=openemr
-      - MYSQL_PASS=openemrpass
-      - MYSQL_DATABASE=openemr
-    networks:
-      - ehr_network
-
+  # 1. OpenEMR Database Service (Stable Config)
   mariadb:
     image: mariadb:10.6
+    container_name: mariadb
     volumes:
-      - mariadb-data:/var/lib/mysql
+      - mariadb_data:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD=rootpass
-      - MYSQL_DATABASE=openemr
-      - MYSQL_USER=openemr
-      - MYSQL_PASSWORD=openemrpass
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: openemr
+      MYSQL_USER: openemr
+      MYSQL_PASSWORD: openemrpass
     networks:
       - ehr_network
 
+  # 2. OpenEMR Web Interface (Stable Config)
+  openemr:
+    image: openemr/openemr:7.0.0 # RESTORED
+    container_name: openemr
+    ports:
+      - "80:80"
+    links:
+      - mariadb:mysql
+    depends_on:
+      - mariadb 
+    environment:
+      MYSQL_HOST: mariadb
+      MYSQL_ROOT_PASS: rootpass
+      MYSQL_USER: openemr
+      MYSQL_PASS: openemrpass
+      MYSQL_DATABASE: openemr
+    networks:
+      - ehr_network
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - openemr_logs:/var/log
+      - openemr_sites:/var/www/localhost/htdocs/openemr/sites
+      
+
+  # 3. New .NET 8 Web API Service (EHR Bridge - Corrected)
+  ehrbridge.api:
+    image: ehrbridge.api:latest
+    container_name: ehrbridge.api
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PROJECT_NAME: EhrBridge.Api/EhrBridge.Api.csproj
+    ports:
+      - "8080:8080" 
+    depends_on:
+      - openemr
+      - mariadb
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+    networks:
+      - ehr_network
+    # IMPORTANT: Wait 10 seconds to ensure MariaDB is initialized before starting API
+    command: /bin/bash -c "sleep 10 && dotnet EhrBridge.Api.dll"
+      
 networks:
   ehr_network:
     driver: bridge
 
 volumes:
-  mariadb-data:
-  openemr-logs:
-  openemr-sites:
+  mariadb_data:
+  openemr_logs:
+  openemr_sites:

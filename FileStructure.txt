@@ -1,6 +1,8 @@
 .
 ├── Dockerfile
 ├── EhrBridge.Api
+│   ├── Controllers
+│   │   └── AuditController.cs
 │   ├── Data
 │   │   ├── AuditResultDto.cs
 │   │   └── IncompleteRecordDto.cs
@@ -9,6 +11,8 @@
 │   ├── Program.cs
 │   ├── Properties
 │   │   └── launchSettings.json
+│   ├── Services
+│   │   └── AuditService.cs
 │   ├── WeatherForecast.cs
 │   ├── appsettings.Development.json
 │   ├── appsettings.json
@@ -113,4 +117,4 @@
     ├── Full_Patient_Export.csv
     └── Incomplete_Demographics_Audit_List.csv
 
-32 directories, 82 files
+34 directories, 84 files
