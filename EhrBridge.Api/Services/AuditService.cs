@@ -1,73 +1,97 @@
+using System.Data;
+using MySql.Data.MySqlClient;
 using EhrBridge.Api.Data;
-using MySqlConnector;
+using EhrBridge.Api.Models;
 
-namespace EhrBridge.Api.Services;
-
-public class AuditService
+namespace EhrBridge.Api.Services
 {
-    private readonly ILogger<AuditService> _logger;
-    // The mariadb connection string, using the Docker service name 'mariadb' and port '3000'
-    private const string ConnectionString = "server=mariadb;port=3000;database=openemr;user=openemr;password=openemrpass;SslMode=None;";
-
-    public AuditService(ILogger<AuditService> logger)
+    public class AuditService
     {
-        _logger = logger;
-    }
+        private readonly string _connectionString;
+        private readonly ILogger<AuditService> _logger;
 
-    // Public method to execute the core data quality audit.
-    public async Task<AuditResultDto> RunDataQualityAuditAsync(CancellationToken stoppingToken)
-    {
-        _logger.LogInformation("Starting Data Quality Audit on local OpenEMR database...");
-        
-        var result = new AuditResultDto();
-        var allPatients = 0;
-        
-        try
+        public AuditService(IConfiguration config, ILogger<AuditService> logger)
         {
-            await using var connection = new MySqlConnection(ConnectionString);
-            await connection.OpenAsync(stoppingToken);
-            
-            // Core Audit Query: Select patient records where the Patient ID is valid.
-            // In the original Worker Service, this query was WHERE pid > 0
-            var command = new MySqlCommand("SELECT pid, fname, lname, phone_cell, street FROM patient_data WHERE pid > 0;", connection);
-            await using var reader = await command.ExecuteReaderAsync(stoppingToken);
+            _connectionString = config.GetConnectionString("EhrDatabase") 
+                ?? throw new ArgumentNullException(nameof(_connectionString));
+            _logger = logger;
+        }
 
-            while (await reader.ReadAsync(stoppingToken))
+        public async Task<AuditResultDto> RunDataQualityAuditAsync(CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Starting Data Quality Audit...");
+
+            var incompleteRecords = await GetIncompleteDemographicsAsync();
+
+            var result = new AuditResultDto
             {
-                allPatients++;
-                var patientId = reader.GetInt64("pid");
-                var firstName = reader.GetString("fname");
-                var lastName = reader.GetString("lname");
-                // Note: GetString will return string.Empty for NULL database fields, which is perfect for our audit logic.
-                var phone = reader.GetString("phone_cell");
-                var street = reader.GetString("street");
-
-                // Audit Rule: Check for missing street OR missing phone
-                if (string.IsNullOrEmpty(street) || string.IsNullOrEmpty(phone))
+                TotalRecordsScanned = await GetTotalPatientCountAsync(),
+                IncompleteRecordsFound = incompleteRecords.Count,
+                IncompleteRecords = incompleteRecords.Select(r => new IncompleteRecordDto
                 {
-                    result.IncompleteRecordsFound++;
-                    
-                    // Populate the DTO with minimal PHI required for administrative action
-                    result.IncompleteRecords.Add(new IncompleteRecordDto
+                    PatientId = r.PatientId,
+                    Field = r.Field,
+                    Description = r.Description
+                }).ToList()
+            };
+
+            _logger.LogInformation("Audit complete. Found {count} incomplete records.", incompleteRecords.Count);
+
+            return result;
+        }
+
+        private async Task<int> GetTotalPatientCountAsync()
+        {
+            await using var connection = new MySqlConnection(_connectionString);
+            await connection.OpenAsync();
+
+            await using var command = new MySqlCommand("SELECT COUNT(*) FROM patient_data;", connection);
+            var count = Convert.ToInt32(await command.ExecuteScalarAsync());
+            return count;
+        }
+
+        private async Task<List<IncompleteRecord>> GetIncompleteDemographicsAsync()
+        {
+            var incompleteRecords = new List<IncompleteRecord>();
+
+            await using var connection = new MySqlConnection(_connectionString);
+            await connection.OpenAsync();
+
+            var query = @"
+                SELECT pid, fname, lname, phone_cell, street
+                FROM patient_data;
+            ";
+
+            await using var command = new MySqlCommand(query, connection);
+            await using var reader = await command.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                var pid = reader.GetInt32("pid");
+                var fname = reader["fname"]?.ToString() ?? "";
+                var lname = reader["lname"]?.ToString() ?? "";
+                var phone = reader["phone_cell"]?.ToString() ?? "";
+                var street = reader["street"]?.ToString() ?? "";
+
+                var missingFields = new List<string>();
+
+                if (string.IsNullOrWhiteSpace(fname)) missingFields.Add("First Name");
+                if (string.IsNullOrWhiteSpace(lname)) missingFields.Add("Last Name");
+                if (string.IsNullOrWhiteSpace(phone)) missingFields.Add("Phone");
+                if (string.IsNullOrWhiteSpace(street)) missingFields.Add("Address");
+
+                if (missingFields.Count > 0)
+                {
+                    incompleteRecords.Add(new IncompleteRecord
                     {
-                        PatientId = patientId,
-                        FirstName = firstName,
-                        LastName = lastName,
-                        MissingDataFlag = string.IsNullOrEmpty(street) ? "Missing Address (street)" : "Missing Phone (phone_cell)"
+                        PatientId = pid,
+                        Field = string.Join(", ", missingFields),
+                        Description = "Missing required demographic fields."
                     });
                 }
             }
-            
-            result.TotalRecordsScanned = allPatients;
-            _logger.LogInformation("Analysis complete. Found {Count} incomplete records.", result.IncompleteRecordsFound);
+
+            return incompleteRecords;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "An error occurred during the data quality audit in the AuditService. Returning empty result set.");
-            // Return empty results on failure to prevent crashing the API
-            return new AuditResultDto { TotalRecordsScanned = 0, IncompleteRecordsFound = 0 };
-        }
-        
-        return result;
     }
 }

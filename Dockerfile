@@ -2,7 +2,7 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copy everything
+# Copy all files
 COPY . ./
 
 # Restore dependencies
@@ -22,5 +22,4 @@ WORKDIR /app
 COPY --from=build /app/api ./api
 COPY --from=build /app/worker ./worker
 
-# Default command (overridden by docker-compose)
-ENTRYPOINT ["dotnet", "api/EhrBridge.Api.dll"]
+# No default ENTRYPOINT; docker-compose will set command per service

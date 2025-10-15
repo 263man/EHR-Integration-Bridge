@@ -1,0 +1,62 @@
+./
+├── .gitignore
+├── Dockerfile
+├── EhrBridge.Api/
+│   ├── Controllers/
+│   │   └── AuditController.cs
+│   ├── Data/
+│   │   ├── AuditResultDto.cs
+│   │   └── IncompleteRecordDto.cs
+│   ├── EhrBridge.Api.csproj
+│   ├── EhrBridge.Api.http
+│   ├── Models/
+│   │   └── IncompleteRecord.cs
+│   ├── Program.cs
+│   ├── Properties/
+│   │   └── launchSettings.json
+│   ├── Services/
+│   │   └── AuditService.cs
+│   ├── WeatherForecast.cs
+│   ├── appsettings.Development.json
+│   └── appsettings.json
+├── EhrIntegrationBridge/
+│   ├── CleanPatientRecord.cs
+│   ├── EhrIntegrationBridge.csproj
+│   ├── IncompleteDemographicRecord.cs
+│   ├── PatientDataGenerator.cs
+│   ├── Program.cs
+│   ├── Properties/
+│   │   └── launchSettings.json
+│   ├── Worker.cs
+│   ├── appsettings.Development.json
+│   └── appsettings.json
+├── EhrIntegrationBridge.sln
+├── Hapi_Fhir_Patient_Export.csv
+├── docker-compose.yml
+├── ehr-bridge-frontend/
+│   ├── .gitignore
+│   ├── README.md
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── public/
+│   ├── src/
+│   │   ├── App.css
+│   │   ├── App.tsx
+│   │   ├── assets/
+│   │   ├── hooks/
+│   │   │   └── useAuditData.ts
+│   │   ├── index.css
+│   │   └── main.tsx
+│   ├── tsconfig.app.json
+│   ├── tsconfig.json
+│   ├── tsconfig.node.json
+│   └── vite.config.ts
+├── fhir-evidence/
+│   ├── FhirEvidenceGenerator.csproj
+│   ├── FhirPatientRecord.cs
+│   └── Program.cs
+└── output/
+    ├── Full_Patient_Export.csv
+    └── Incomplete_Demographics_Audit_List.csv

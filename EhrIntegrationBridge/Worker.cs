@@ -1,208 +1,113 @@
-using CsvHelper;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using MySqlConnector;
-using System.Globalization;
 
-namespace EhrIntegrationBridge;
-
-public class Worker(ILogger<Worker> logger) : BackgroundService
+namespace EhrIntegrationBridge
 {
-    protected override async System.Threading.Tasks.Task ExecuteAsync(CancellationToken stoppingToken)
+    public class Worker : BackgroundService
     {
-        var workerMode = Environment.GetEnvironmentVariable("WORKER_MODE") ?? "Extract";
-        logger.LogInformation("--- EHR BRIDGE WORKER STARTING ---");
-        logger.LogInformation("   - Mode: {Mode}", workerMode);
+        private readonly ILogger<Worker> _logger;
+        private readonly string _connectionString;
 
-        if (!await WaitForDatabaseAsync(stoppingToken))
+        public Worker(ILogger<Worker> logger)
         {
-            logger.LogCritical("Local database did not become available. Shutting down.");
-            return;
+            _logger = logger;
+
+            // Read connection string from environment in the order of precedence used in the compose file
+            _connectionString =
+                Environment.GetEnvironmentVariable("ConnectionStrings__EhrDatabase") ??
+                Environment.GetEnvironmentVariable("MYSQL_CONNECTION") ??
+                "Server=mariadb;Database=openemr;User Id=openemr;Password=openemrpass;";
         }
 
-        if (workerMode.Equals("Sync", StringComparison.OrdinalIgnoreCase))
-            await RunSyncAndSeedLogicAsync(stoppingToken);
-        else
-            await RunDataQualityAuditAsync(stoppingToken);
-
-        logger.LogInformation("--- EHR BRIDGE WORKER FINISHED ---");
-    }
-
-    private async System.Threading.Tasks.Task<string> DetectPatientTableAsync(MySqlConnection connection)
-    {
-        var possibleTables = new[] { "patient_data", "patients", "demographics" };
-        foreach (var table in possibleTables)
+        protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            _logger.LogInformation("--- EHR BRIDGE WORKER STARTING ---");
+            _logger.LogInformation("         - Mode: Sync");
+            _logger.LogInformation("🔗 Using connection string: {Conn}", _connectionString);
+
             try
             {
-                var checkCmd = new MySqlCommand($"SHOW TABLES LIKE '{table}';", connection);
-                var result = await checkCmd.ExecuteScalarAsync();
-                if (result != null)
+                await WaitForDatabaseAsync(stoppingToken);
+                await SeedTestPatientsAsync(stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error in worker.");
+            }
+
+            _logger.LogInformation("--- EHR BRIDGE WORKER FINISHED ---");
+        }
+
+        private async Task WaitForDatabaseAsync(CancellationToken token)
+        {
+            bool connected = false;
+            while (!connected && !token.IsCancellationRequested)
+            {
+                try
                 {
-                    return table;
+                    await using var conn = new MySqlConnection(_connectionString);
+                    await conn.OpenAsync(token);
+                    connected = true;
+                    _logger.LogInformation("✅ Database connection successful.");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Database not ready yet: {Message}", ex.Message);
+                    await Task.Delay(2000, token);
                 }
             }
-            catch
-            {
-                // ignore and try next
-            }
         }
 
-        throw new InvalidOperationException("❌ Could not detect patient table in OpenEMR database.");
-    }
-
-    private async System.Threading.Tasks.Task RunDataQualityAuditAsync(CancellationToken stoppingToken)
-    {
-        logger.LogInformation("--- Starting Data Quality Audit on local OpenEMR database ---");
-
-        var allPatients = new List<CleanPatientRecord>();
-        var incompleteRecords = new List<IncompleteDemographicRecord>();
-
-        try
+        private async Task SeedTestPatientsAsync(CancellationToken token)
         {
-            var connectionString = "server=mariadb;port=3306;database=openemr;user=openemr;password=openemrpass;SslMode=None;";
-            await using var connection = new MySqlConnection(connectionString);
-            await connection.OpenAsync(stoppingToken);
+            _logger.LogInformation("--- Seeding local OpenEMR with new test patients ---");
 
-            var patientTable = await DetectPatientTableAsync(connection);
-            logger.LogInformation("✅ Detected patient table: {Table}", patientTable);
+            await using var conn = new MySqlConnection(_connectionString);
+            await conn.OpenAsync(token);
 
-            var query = $@"SELECT pid, fname, lname, DOB, sex, phone_cell, street 
-                           FROM {patientTable} WHERE pid > 0;";
-            var command = new MySqlCommand(query, connection);
-
-            await using var reader = await command.ExecuteReaderAsync(stoppingToken);
-            while (await reader.ReadAsync(stoppingToken))
+            // Verify patient_data table exists
+            await using (var checkCmd = new MySqlCommand("SHOW TABLES LIKE 'patient_data';", conn))
             {
-                var patientId = reader.GetInt64("pid");
-                var firstName = reader["fname"]?.ToString() ?? "";
-                var lastName = reader["lname"]?.ToString() ?? "";
-                var dob = reader["DOB"]?.ToString() ?? "";
-                var gender = reader["sex"]?.ToString() ?? "";
-                var phone = reader["phone_cell"]?.ToString() ?? "";
-                var street = reader["street"]?.ToString() ?? "";
-
-                allPatients.Add(new CleanPatientRecord
+                var result = await checkCmd.ExecuteScalarAsync(token);
+                if (result == null)
                 {
-                    PatientId = patientId,
-                    FirstName = firstName,
-                    LastName = lastName,
-                    DateOfBirth = dob,
-                    Gender = gender,
-                    PhoneNumber = phone
-                });
-
-                if (string.IsNullOrWhiteSpace(street) || string.IsNullOrWhiteSpace(phone))
-                {
-                    incompleteRecords.Add(new IncompleteDemographicRecord
-                    {
-                        PatientId = patientId,
-                        FirstName = firstName,
-                        LastName = lastName,
-                        MissingDataFlag = string.IsNullOrWhiteSpace(street) ? "Missing Address" : "Missing Phone"
-                    });
+                    _logger.LogError("❌ patient_data table not found.");
+                    return;
                 }
+
+                _logger.LogInformation("✅ Detected patient table: patient_data");
             }
 
-            logger.LogInformation("✅ Analysis complete. Found {Count} incomplete records.", incompleteRecords.Count);
+            // Generate a .NET GUID string and let MySQL convert it to binary(16) using UNHEX(REPLACE(...))
+            var uuidString = Guid.NewGuid().ToString();
 
-            Directory.CreateDirectory("output");
+            // We use UNHEX(REPLACE(@uuid, '-', '')) so the column (binary(16)) gets the correct 16 bytes.
+            string insertSql = @"
+INSERT INTO patient_data
+(uuid, title, language, financial, fname, lname, mname, DOB, street, city, state, country_code, email)
+VALUES
+(UNHEX(REPLACE(@uuid, '-', '')), 'Mr', 'English', 'Self-Pay', 'John', 'Doe', '', '1980-01-01', '123 Main St', 'Cityville', 'CA', 'US', 'john.doe@example.com');";
 
-            var fullExportPath = Path.Combine("output", "Full_Patient_Export.csv");
-            await using (var writer = new StreamWriter(fullExportPath))
-            await using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+            await using (var insertCmd = new MySqlCommand(insertSql, conn))
             {
-                await csv.WriteRecordsAsync(allPatients, stoppingToken);
+                insertCmd.Parameters.AddWithValue("@uuid", uuidString);
+                var rows = await insertCmd.ExecuteNonQueryAsync(token);
+                _logger.LogInformation("Inserted rows: {Count}", rows);
             }
 
-            var auditListPath = Path.Combine("output", "Incomplete_Demographics_Audit_List.csv");
-            await using (var writer = new StreamWriter(auditListPath))
-            await using (var csv = new CsvWriter(writer, CultureInfo.InvariantCulture))
+            // Ensure pid is set (some OpenEMR installs keep pid = 0 until manually updated)
+            string updatePidSql = "UPDATE patient_data SET pid = id WHERE pid = 0;";
+            await using (var updateCmd = new MySqlCommand(updatePidSql, conn))
             {
-                await csv.WriteRecordsAsync(incompleteRecords, stoppingToken);
+                var updated = await updateCmd.ExecuteNonQueryAsync(token);
+                _logger.LogInformation("Updated pid for {Count} records where pid was 0.", updated);
             }
 
-            logger.LogInformation("✅ Reports written: {FullExport} and {AuditExport}", fullExportPath, auditListPath);
+            _logger.LogInformation("✅ Seeding finished.");
         }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "❌ Error occurred during data audit.");
-        }
-    }
-
-    private async System.Threading.Tasks.Task RunSyncAndSeedLogicAsync(CancellationToken stoppingToken)
-    {
-        logger.LogInformation("--- Seeding local OpenEMR with new test patients ---");
-
-        try
-        {
-            var patientsToCreate = PatientDataGenerator.GeneratePatients(1000);
-            var connectionString = "server=mariadb;port=3306;database=openemr;user=openemr;password=openemrpass;SslMode=None;";
-
-            await using var connection = new MySqlConnection(connectionString);
-            await connection.OpenAsync(stoppingToken);
-
-            var patientTable = await DetectPatientTableAsync(connection);
-            logger.LogInformation("✅ Detected patient table: {Table}", patientTable);
-
-            var deleteCmd = new MySqlCommand($"DELETE FROM {patientTable} WHERE pid > 0;", connection);
-            await deleteCmd.ExecuteNonQueryAsync(stoppingToken);
-
-            foreach (var patient in patientsToCreate)
-            {
-                if (stoppingToken.IsCancellationRequested) break;
-
-                var insertCmd = new MySqlCommand($@"
-                    INSERT INTO {patientTable} 
-                    (pid, fname, lname, DOB, sex, street, city, state, postal_code, phone_cell)
-                    VALUES (@pid, @fname, @lname, @dob, @sex, @street, @city, @state, @postal_code, @phone);", connection);
-
-                insertCmd.Parameters.AddWithValue("@pid", patient.Pid);
-                insertCmd.Parameters.AddWithValue("@fname", patient.FirstName);
-                insertCmd.Parameters.AddWithValue("@lname", patient.LastName);
-                insertCmd.Parameters.AddWithValue("@dob", patient.DateOfBirth);
-                insertCmd.Parameters.AddWithValue("@sex", patient.Gender);
-                insertCmd.Parameters.AddWithValue("@street", patient.StreetAddress);
-                insertCmd.Parameters.AddWithValue("@city", patient.City);
-                insertCmd.Parameters.AddWithValue("@state", patient.State);
-                insertCmd.Parameters.AddWithValue("@postal_code", patient.PostalCode);
-                insertCmd.Parameters.AddWithValue("@phone", patient.PhoneNumber);
-
-                await insertCmd.ExecuteNonQueryAsync(stoppingToken);
-            }
-
-            logger.LogInformation("✅ Seeding complete: {Count} new patients created.", patientsToCreate.Count);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "❌ Error occurred while seeding the database.");
-        }
-    }
-
-    private async System.Threading.Tasks.Task<bool> WaitForDatabaseAsync(CancellationToken stoppingToken)
-    {
-        logger.LogInformation("Waiting for local database to be ready...");
-        var connectionString = "server=mariadb;port=3306;database=openemr;user=openemr;password=openemrpass;SslMode=None;";
-        var attempt = 0;
-
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                attempt++;
-                await using var connection = new MySqlConnection(connectionString);
-                await connection.OpenAsync(stoppingToken);
-                logger.LogInformation("✅ Database connection successful.");
-                return true;
-            }
-            catch
-            {
-                if (attempt >= 30)
-                {
-                    logger.LogError("❌ Database unavailable after 30 attempts.");
-                    return false;
-                }
-                await System.Threading.Tasks.Task.Delay(5000, stoppingToken);
-            }
-        }
-        return false;
     }
 }

@@ -2,7 +2,6 @@ import './App.css';
 import useAuditData from './hooks/useAuditData';
 
 function App() {
-  // Use the custom hook to fetch data
   const { data, loading, error } = useAuditData();
 
   if (loading) {
@@ -10,17 +9,19 @@ function App() {
   }
 
   if (error) {
-    return <div className="app-container error">
-      <h1>Error Fetching Data!</h1>
-      <p>Error: {error}</p>
-      <p>Make sure the Docker stack is running: <strong>docker compose up --build -d</strong></p>
-    </div>;
+    return (
+      <div className="app-container error">
+        <h1>Error Fetching Data!</h1>
+        <p>{error}</p>
+        <p>Ensure Docker is running: <strong>docker compose up --build -d</strong></p>
+      </div>
+    );
   }
 
   return (
     <div className="app-container">
       <h1>EHR Data Audit Dashboard</h1>
-      
+
       <div className="summary-cards">
         <div className="card">
           <h2>Total Records Scanned</h2>
@@ -33,7 +34,7 @@ function App() {
       </div>
 
       <h2>Incomplete Demographics List ({data.incompleteRecords.length})</h2>
-      
+
       <table className="audit-table">
         <thead>
           <tr>
@@ -43,8 +44,8 @@ function App() {
           </tr>
         </thead>
         <tbody>
-          {data.incompleteRecords.map((record, index) => (
-            <tr key={index}>
+          {data.incompleteRecords.map((record) => (
+            <tr key={`${record.patientId}-${record.field}`}>
               <td>{record.patientId}</td>
               <td>{record.field}</td>
               <td>{record.description}</td>

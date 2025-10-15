@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   mariadb:
     image: mariadb:10.6
@@ -15,7 +13,7 @@ services:
     networks:
       - ehr_network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-prootpass"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -53,9 +51,12 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - openemr
+      - mariadb
     networks:
       - ehr_network
+    environment:
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__EhrDatabase=Server=mariadb;Database=openemr;User Id=openemr;Password=openemrpass;
 
   ehrbridge_worker:
     build:
@@ -63,16 +64,12 @@ services:
       dockerfile: Dockerfile
     container_name: ehrbridge_worker
     restart: on-failure
-    environment:
-      WORKER_MODE: "Sync"
     command: ["dotnet", "worker/EhrIntegrationBridge.dll"]
+    environment:
+      - WORKER_MODE=Sync
+      - ConnectionStrings__EhrDatabase=Server=mariadb;Database=openemr;User Id=openemr;Password=openemrpass;
     depends_on:
-      openemr:
-        condition: service_started
-      mariadb:
-        condition: service_healthy
-    volumes:
-      - ./output:/app/output
+      - mariadb
     networks:
       - ehr_network
 
