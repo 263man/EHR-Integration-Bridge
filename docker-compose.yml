@@ -40,6 +40,13 @@ services:
         condition: service_healthy
     networks:
       - ehr_network
+    # 🛑 NEW FIX: ADDED HEALTH CHECK TO ENSURE SCHEMA IS READY
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/index.php"] # Check for the permanent login page
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s # Give the setup script more time to run and delete setup.php
 
   ehrbridge_api:
     build:
@@ -50,8 +57,9 @@ services:
     command: ["dotnet", "api/EhrBridge.Api.dll"]
     ports:
       - "8080:8080"
+    # 🛑 DEPENDS ON OPENEMR being available for its own connectivity check logic
     depends_on:
-      - mariadb
+      - openemr
     networks:
       - ehr_network
     environment:
@@ -63,15 +71,17 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ehrbridge_worker
-    restart: on-failure
+    restart: "no" # Set to "no" to ensure it only runs once per fresh start
     command: ["dotnet", "worker/EhrIntegrationBridge.dll"]
     environment:
       - WORKER_MODE=Sync
       - ConnectionStrings__EhrDatabase=Server=mariadb;Database=openemr;User Id=openemr;Password=openemrpass;
-    depends_on:
-      - mariadb
     networks:
       - ehr_network
+    # 🛑 NEW FIX: DEPENDS ON OpenEMR being HEALTHY (i.e., table is created)
+    depends_on:
+      openemr:
+        condition: service_healthy
 
 networks:
   ehr_network:
