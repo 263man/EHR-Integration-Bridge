@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MySqlConnector;
+using System.Collections.Generic;
 
 namespace EhrIntegrationBridge
 {
@@ -11,6 +12,9 @@ namespace EhrIntegrationBridge
     {
         private readonly ILogger<Worker> _logger;
         private readonly string _connectionString;
+        
+        // Define the target count for the stress test demo
+        private const int PATIENT_COUNT_TARGET = 1000; 
 
         public Worker(ILogger<Worker> logger)
         {
@@ -26,16 +30,20 @@ namespace EhrIntegrationBridge
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("--- EHR BRIDGE WORKER STARTING ---");
-            _logger.LogInformation("         - Mode: Sync");
+            _logger.LogInformation("      - Mode: Sync");
             _logger.LogInformation("🔗 Using connection string: {Conn}", _connectionString);
 
             try
             {
-                await WaitForDatabaseAsync(stoppingToken);
-                await SeedTestPatientsAsync(stoppingToken);
+                // Ensure connection is established before proceeding
+                await WaitForDatabaseAsync(stoppingToken); 
+                
+                // New step: Seed 1,000 test patients
+                await SeedTestPatientsAsync(stoppingToken); 
             }
             catch (Exception ex)
             {
+                // The worker failed before the final cleanup, we must re-run to fix data if needed.
                 _logger.LogError(ex, "Unexpected error in worker.");
             }
 
@@ -45,7 +53,8 @@ namespace EhrIntegrationBridge
         private async Task WaitForDatabaseAsync(CancellationToken token)
         {
             bool connected = false;
-            while (!connected && !token.IsCancellationRequested)
+            // Explicitly check if connection string is not null or empty before attempting connection
+            while (string.IsNullOrEmpty(_connectionString) == false && !connected && !token.IsCancellationRequested)
             {
                 try
                 {
@@ -64,7 +73,7 @@ namespace EhrIntegrationBridge
 
         private async Task SeedTestPatientsAsync(CancellationToken token)
         {
-            _logger.LogInformation("--- Seeding local OpenEMR with new test patients ---");
+            _logger.LogInformation($"--- Seeding local OpenEMR with {PATIENT_COUNT_TARGET} test patients ---");
 
             await using var conn = new MySqlConnection(_connectionString);
             await conn.OpenAsync(token);
@@ -81,33 +90,102 @@ namespace EhrIntegrationBridge
 
                 _logger.LogInformation("✅ Detected patient table: patient_data");
             }
-
-            // Generate a .NET GUID string and let MySQL convert it to binary(16) using UNHEX(REPLACE(...))
-            var uuidString = Guid.NewGuid().ToString();
-
-            // We use UNHEX(REPLACE(@uuid, '-', '')) so the column (binary(16)) gets the correct 16 bytes.
-            string insertSql = @"
-INSERT INTO patient_data
-(uuid, title, language, financial, fname, lname, mname, DOB, street, city, state, country_code, email)
-VALUES
-(UNHEX(REPLACE(@uuid, '-', '')), 'Mr', 'English', 'Self-Pay', 'John', 'Doe', '', '1980-01-01', '123 Main St', 'Cityville', 'CA', 'US', 'john.doe@example.com');";
-
-            await using (var insertCmd = new MySqlCommand(insertSql, conn))
+            
+            // Dynamically query the maximum existing PID to prevent collisions
+            int maxPid = 0;
+            string maxPidSql = "SELECT MAX(pid) FROM patient_data;";
+            
+            await using (var maxCmd = new MySqlCommand(maxPidSql, conn))
             {
-                insertCmd.Parameters.AddWithValue("@uuid", uuidString);
-                var rows = await insertCmd.ExecuteNonQueryAsync(token);
-                _logger.LogInformation("Inserted rows: {Count}", rows);
+                var result = await maxCmd.ExecuteScalarAsync(token);
+                // Handle DBNull if table is empty, or long if data exists
+                if (result != DBNull.Value && result is long currentMaxLong) 
+                {
+                    maxPid = (int)currentMaxLong;
+                }
             }
+            
+            // Start patient generation AFTER the highest existing PID
+            int startPid = maxPid + 1; 
 
-            // Ensure pid is set (some OpenEMR installs keep pid = 0 until manually updated)
+            _logger.LogInformation($"... Database's current MAX PID is {maxPid}. Starting new patients at PID {startPid}.");
+
+            // 1. GENERATE PATIENTS using the Bogus Faker logic
+            _logger.LogInformation($"... Generating {PATIENT_COUNT_TARGET} patient records (approx. 20% incomplete)...");
+            // Pass the dynamically calculated startPid to the generator
+            List<Patient> patientsToSeed = PatientDataGenerator.GeneratePatients(PATIENT_COUNT_TARGET, startPid);
+            
+            _logger.LogInformation($"... Starting batch insertion of {patientsToSeed.Count} records.");
+
+            int insertedCount = 0;
+            // 2. INSERT PATIENTS
+            foreach (var patient in patientsToSeed)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    _logger.LogWarning("Seeding cancelled mid-operation.");
+                    break;
+                }
+                
+                // Use a dedicated command creation method for clarity and SQL parameter safety
+                await using (var insertCmd = CreatePatientRecordCommand(conn, patient))
+                {
+                    insertedCount += await insertCmd.ExecuteNonQueryAsync(token);
+                }
+            }
+            
+            _logger.LogInformation("Total inserted rows: {Count}", insertedCount);
+
+            // 3. ENSURE PID IS SET (Safety check for records that might use the 'id' auto-increment column)
             string updatePidSql = "UPDATE patient_data SET pid = id WHERE pid = 0;";
             await using (var updateCmd = new MySqlCommand(updatePidSql, conn))
             {
                 var updated = await updateCmd.ExecuteNonQueryAsync(token);
-                _logger.LogInformation("Updated pid for {Count} records where pid was 0.", updated);
+                _logger.LogInformation("Updated pid for {Count} records where pid was 0.", updated); 
             }
 
             _logger.LogInformation("✅ Seeding finished.");
+        }
+        
+        private MySqlCommand CreatePatientRecordCommand(MySqlConnection conn, Patient patient)
+        {
+            // 💡 FIX: Added 'ss' (SSN) and 'date' (Record Creation Date) to the list of columns
+            string insertSql = @"
+INSERT INTO patient_data
+(pid, uuid, title, language, financial, fname, lname, sex, DOB, street, city, state, postal_code, country_code, email, phone_home, ss, date)
+VALUES
+(@pid, UNHEX(REPLACE(@uuid, '-', '')), 'Mr', 'English', 'Self-Pay', @fname, @lname, @sex, @DOB, @street, @city, @state, @postal_code, 'US', @email, @phone, @ss, @date);";
+
+            var insertCmd = new MySqlCommand(insertSql, conn);
+            
+            insertCmd.Parameters.AddWithValue("@pid", patient.Pid); 
+
+            // Generate a unique, standards-compliant GUID for the UUID column
+            var uuidString = Guid.NewGuid().ToString(); 
+            
+            insertCmd.Parameters.AddWithValue("@uuid", uuidString);
+            insertCmd.Parameters.AddWithValue("@fname", patient.FirstName);
+            insertCmd.Parameters.AddWithValue("@lname", patient.LastName);
+            insertCmd.Parameters.AddWithValue("@sex", patient.Sex); 
+            insertCmd.Parameters.AddWithValue("@DOB", patient.DateOfBirth.ToString("yyyy-MM-dd")); 
+            insertCmd.Parameters.AddWithValue("@street", patient.StreetAddress);
+            insertCmd.Parameters.AddWithValue("@city", patient.City);
+            insertCmd.Parameters.AddWithValue("@state", patient.State);
+            insertCmd.Parameters.AddWithValue("@postal_code", patient.PostalCode);
+            
+            string email = $"{patient.FirstName}.{patient.LastName}@{patient.City?.Replace(" ", "").ToLowerInvariant()}.com";
+            insertCmd.Parameters.AddWithValue("@email", email); 
+            
+            // Phone home fix remains: use empty string if null
+            insertCmd.Parameters.AddWithValue("@phone", patient.PhoneNumber ?? string.Empty); 
+            
+            // SSN fix is kept
+            insertCmd.Parameters.AddWithValue("@ss", patient.SocialSecurityNumber);
+            
+            // 💡 NEW FIX: Add the current datetime for the 'date' column
+            insertCmd.Parameters.AddWithValue("@date", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+
+            return insertCmd;
         }
     }
 }

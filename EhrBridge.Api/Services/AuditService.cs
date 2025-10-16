@@ -2,6 +2,8 @@ using System.Data;
 using MySql.Data.MySqlClient;
 using EhrBridge.Api.Data;
 using EhrBridge.Api.Models;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace EhrBridge.Api.Services
 {
@@ -12,7 +14,7 @@ namespace EhrBridge.Api.Services
 
         public AuditService(IConfiguration config, ILogger<AuditService> logger)
         {
-            _connectionString = config.GetConnectionString("EhrDatabase") 
+            _connectionString = config.GetConnectionString("EhrDatabase")
                 ?? throw new ArgumentNullException(nameof(_connectionString));
             _logger = logger;
         }
@@ -20,6 +22,9 @@ namespace EhrBridge.Api.Services
         public async Task<AuditResultDto> RunDataQualityAuditAsync(CancellationToken cancellationToken = default)
         {
             _logger.LogInformation("Starting Data Quality Audit...");
+
+            // Ensure the cancellation token is respected
+            cancellationToken.ThrowIfCancellationRequested();
 
             var incompleteRecords = await GetIncompleteDemographicsAsync();
 
@@ -46,8 +51,17 @@ namespace EhrBridge.Api.Services
             await connection.OpenAsync();
 
             await using var command = new MySqlCommand("SELECT COUNT(*) FROM patient_data;", connection);
-            var count = Convert.ToInt32(await command.ExecuteScalarAsync());
-            return count;
+            // Using ExecuteScalarAsync to get the count
+            var result = await command.ExecuteScalarAsync();
+            
+            // Explicitly handle DBNull.Value which can happen if the table is truly empty, though unlikely here.
+            if (result == DBNull.Value || result is null)
+            {
+                return 0;
+            }
+            
+            // Cast or convert to Int32
+            return Convert.ToInt32(result);
         }
 
         private async Task<List<IncompleteRecord>> GetIncompleteDemographicsAsync()
@@ -57,8 +71,9 @@ namespace EhrBridge.Api.Services
             await using var connection = new MySqlConnection(_connectionString);
             await connection.OpenAsync();
 
+            // FIX: Changed 'phone_cell' to the correct column 'phone_home'
             var query = @"
-                SELECT pid, fname, lname, phone_cell, street
+                SELECT pid, fname, lname, phone_home, street 
                 FROM patient_data;
             ";
 
@@ -70,15 +85,22 @@ namespace EhrBridge.Api.Services
                 var pid = reader.GetInt32("pid");
                 var fname = reader["fname"]?.ToString() ?? "";
                 var lname = reader["lname"]?.ToString() ?? "";
-                var phone = reader["phone_cell"]?.ToString() ?? "";
+                
+                // FIX: Retrieve the correct column name 'phone_home'
+                var phone = reader["phone_home"]?.ToString() ?? ""; 
                 var street = reader["street"]?.ToString() ?? "";
 
                 var missingFields = new List<string>();
 
-                if (string.IsNullOrWhiteSpace(fname)) missingFields.Add("First Name");
-                if (string.IsNullOrWhiteSpace(lname)) missingFields.Add("Last Name");
-                if (string.IsNullOrWhiteSpace(phone)) missingFields.Add("Phone");
-                if (string.IsNullOrWhiteSpace(street)) missingFields.Add("Address");
+                // Use explicit check: string.IsNullOrWhiteSpace(x) == true
+                if (string.IsNullOrWhiteSpace(fname) == true) missingFields.Add("First Name");
+                if (string.IsNullOrWhiteSpace(lname) == true) missingFields.Add("Last Name");
+                
+                // This is the primary point of failure before the fix.
+                // It now correctly checks the 'phone_home' column value.
+                if (string.IsNullOrWhiteSpace(phone) == true) missingFields.Add("Phone (Home)");
+                
+                if (string.IsNullOrWhiteSpace(street) == true) missingFields.Add("Address");
 
                 if (missingFields.Count > 0)
                 {
