@@ -3,10 +3,6 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EhrIntegrationBridge", "EhrIntegrationBridge\EhrIntegrationBridge.csproj", "{73807026-42D1-4AE7-BA2C-F111F91646BD}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FhirEvidenceGenerator", "fhir-evidence\FhirEvidenceGenerator.csproj", "{F887D777-975A-4442-B231-790AFB6B7CE6}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EhrBridge.Api", "EhrBridge.Api\EhrBridge.Api.csproj", "{74BD0781-9DCC-46BE-B25E-84E0F4A12A21}"
 EndProject
 Global
@@ -19,30 +15,6 @@ Global
 		Release|x86 = Release|x86
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{73807026-42D1-4AE7-BA2C-F111F91646BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{73807026-42D1-4AE7-BA2C-F111F91646BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{73807026-42D1-4AE7-BA2C-F111F91646BD}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{73807026-42D1-4AE7-BA2C-F111F91646BD}.Debug|x64.Build.0 = Debug|Any CPU
-		{73807026-42D1-4AE7-BA2C-F111F91646BD}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{73807026-42D1-4AE7-BA2C-F111F91646BD}.Debug|x86.Build.0 = Debug|Any CPU
-		{73807026-42D1-4AE7-BA2C-F111F91646BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{73807026-42D1-4AE7-BA2C-F111F91646BD}.Release|Any CPU.Build.0 = Release|Any CPU
-		{73807026-42D1-4AE7-BA2C-F111F91646BD}.Release|x64.ActiveCfg = Release|Any CPU
-		{73807026-42D1-4AE7-BA2C-F111F91646BD}.Release|x64.Build.0 = Release|Any CPU
-		{73807026-42D1-4AE7-BA2C-F111F91646BD}.Release|x86.ActiveCfg = Release|Any CPU
-		{73807026-42D1-4AE7-BA2C-F111F91646BD}.Release|x86.Build.0 = Release|Any CPU
-		{F887D777-975A-4442-B231-790AFB6B7CE6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{F887D777-975A-4442-B231-790AFB6B7CE6}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{F887D777-975A-4442-B231-790AFB6B7CE6}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{F887D777-975A-4442-B231-790AFB6B7CE6}.Debug|x64.Build.0 = Debug|Any CPU
-		{F887D777-975A-4442-B231-790AFB6B7CE6}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{F887D777-975A-4442-B231-790AFB6B7CE6}.Debug|x86.Build.0 = Debug|Any CPU
-		{F887D777-975A-4442-B231-790AFB6B7CE6}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{F887D777-975A-4442-B231-790AFB6B7CE6}.Release|Any CPU.Build.0 = Release|Any CPU
-		{F887D777-975A-4442-B231-790AFB6B7CE6}.Release|x64.ActiveCfg = Release|Any CPU
-		{F887D777-975A-4442-B231-790AFB6B7CE6}.Release|x64.Build.0 = Release|Any CPU
-		{F887D777-975A-4442-B231-790AFB6B7CE6}.Release|x86.ActiveCfg = Release|Any CPU
-		{F887D777-975A-4442-B231-790AFB6B7CE6}.Release|x86.Build.0 = Release|Any CPU
 		{74BD0781-9DCC-46BE-B25E-84E0F4A12A21}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{74BD0781-9DCC-46BE-B25E-84E0F4A12A21}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{74BD0781-9DCC-46BE-B25E-84E0F4A12A21}.Debug|x64.ActiveCfg = Debug|Any CPU

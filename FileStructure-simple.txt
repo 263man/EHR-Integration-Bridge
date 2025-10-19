@@ -3,10 +3,15 @@
 ├── Dockerfile
 ├── EhrBridge.Api/
 │   ├── Controllers/
-│   │   └── AuditController.cs
+│   │   ├── AuditController.cs
+│   │   └── ControlController.cs
 │   ├── Data/
 │   │   ├── AuditResultDto.cs
 │   │   └── IncompleteRecordDto.cs
+│   ├── DataGeneration/
+│   │   ├── CleanPatientRecord.cs
+│   │   ├── IncompleteDemographicRecord.cs
+│   │   └── PatientDataGenerator.cs
 │   ├── EhrBridge.Api.csproj
 │   ├── EhrBridge.Api.http
 │   ├── Models/
@@ -15,19 +20,10 @@
 │   ├── Properties/
 │   │   └── launchSettings.json
 │   ├── Services/
-│   │   └── AuditService.cs
-│   ├── WeatherForecast.cs
-│   ├── appsettings.Development.json
-│   └── appsettings.json
-├── EhrIntegrationBridge/
-│   ├── CleanPatientRecord.cs
-│   ├── EhrIntegrationBridge.csproj
-│   ├── IncompleteDemographicRecord.cs
-│   ├── PatientDataGenerator.cs
-│   ├── Program.cs
-│   ├── Properties/
-│   │   └── launchSettings.json
-│   ├── Worker.cs
+│   │   ├── AuditService.cs
+│   │   ├── ControlService.cs
+│   │   ├── IAuditService.cs
+│   │   └── IControlService.cs
 │   ├── appsettings.Development.json
 │   └── appsettings.json
 ├── EhrIntegrationBridge.sln

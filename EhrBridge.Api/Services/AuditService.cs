@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace EhrBridge.Api.Services
 {
-    public class AuditService
+    public class AuditService : IAuditService
     {
         private readonly string _connectionString;
         private readonly ILogger<AuditService> _logger;
@@ -23,14 +23,14 @@ namespace EhrBridge.Api.Services
         {
             _logger.LogInformation("Starting Data Quality Audit...");
 
-            // Ensure the cancellation token is respected
             cancellationToken.ThrowIfCancellationRequested();
 
             var incompleteRecords = await GetIncompleteDemographicsAsync();
+            var totalCount = await GetTotalPatientCountAsync();
 
             var result = new AuditResultDto
             {
-                TotalRecordsScanned = await GetTotalPatientCountAsync(),
+                TotalRecordsScanned = totalCount,
                 IncompleteRecordsFound = incompleteRecords.Count,
                 IncompleteRecords = incompleteRecords.Select(r => new IncompleteRecordDto
                 {
@@ -51,17 +51,9 @@ namespace EhrBridge.Api.Services
             await connection.OpenAsync();
 
             await using var command = new MySqlCommand("SELECT COUNT(*) FROM patient_data;", connection);
-            // Using ExecuteScalarAsync to get the count
             var result = await command.ExecuteScalarAsync();
-            
-            // Explicitly handle DBNull.Value which can happen if the table is truly empty, though unlikely here.
-            if (result == DBNull.Value || result is null)
-            {
-                return 0;
-            }
-            
-            // Cast or convert to Int32
-            return Convert.ToInt32(result);
+
+            return Convert.ToInt32(result ?? 0);
         }
 
         private async Task<List<IncompleteRecord>> GetIncompleteDemographicsAsync()
@@ -71,9 +63,9 @@ namespace EhrBridge.Api.Services
             await using var connection = new MySqlConnection(_connectionString);
             await connection.OpenAsync();
 
-            // FIX: Changed 'phone_cell' to the correct column 'phone_home'
+            // ✅ use correct column name 'phone_cell' instead of 'phone_home'
             var query = @"
-                SELECT pid, fname, lname, phone_home, street 
+                SELECT pid, fname, lname, phone_cell, street 
                 FROM patient_data;
             ";
 
@@ -83,24 +75,17 @@ namespace EhrBridge.Api.Services
             while (await reader.ReadAsync())
             {
                 var pid = reader.GetInt32("pid");
-                var fname = reader["fname"]?.ToString() ?? "";
-                var lname = reader["lname"]?.ToString() ?? "";
-                
-                // FIX: Retrieve the correct column name 'phone_home'
-                var phone = reader["phone_home"]?.ToString() ?? ""; 
-                var street = reader["street"]?.ToString() ?? "";
+                var fname = reader["fname"]?.ToString();
+                var lname = reader["lname"]?.ToString();
+                var phone = reader["phone_cell"]?.ToString();
+                var street = reader["street"]?.ToString();
 
                 var missingFields = new List<string>();
 
-                // Use explicit check: string.IsNullOrWhiteSpace(x) == true
-                if (string.IsNullOrWhiteSpace(fname) == true) missingFields.Add("First Name");
-                if (string.IsNullOrWhiteSpace(lname) == true) missingFields.Add("Last Name");
-                
-                // This is the primary point of failure before the fix.
-                // It now correctly checks the 'phone_home' column value.
-                if (string.IsNullOrWhiteSpace(phone) == true) missingFields.Add("Phone (Home)");
-                
-                if (string.IsNullOrWhiteSpace(street) == true) missingFields.Add("Address");
+                if (string.IsNullOrWhiteSpace(fname)) missingFields.Add("First Name");
+                if (string.IsNullOrWhiteSpace(lname)) missingFields.Add("Last Name");
+                if (string.IsNullOrWhiteSpace(street)) missingFields.Add("Address");
+                if (string.IsNullOrWhiteSpace(phone)) missingFields.Add("Phone (Cell)");
 
                 if (missingFields.Count > 0)
                 {

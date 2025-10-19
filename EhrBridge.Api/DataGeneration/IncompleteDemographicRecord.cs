@@ -1,4 +1,4 @@
-namespace EhrIntegrationBridge;
+namespace EhrBridge.Api.DataGeneration;
 
 public class IncompleteDemographicRecord
 {

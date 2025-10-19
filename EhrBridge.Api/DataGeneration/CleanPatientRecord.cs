@@ -1,4 +1,4 @@
-namespace EhrIntegrationBridge;
+namespace EhrBridge.Api.DataGeneration;
 
 public class CleanPatientRecord
 {
@@ -7,7 +7,7 @@ public class CleanPatientRecord
     public string LastName { get; set; } = string.Empty;
     public string DateOfBirth { get; set; } = string.Empty;
     public string Gender { get; set; } = string.Empty;
-    public string PhoneNumber { get; set; } = string.Empty;
+    public string? PhoneNumber { get; set; } = string.Empty;
     public string StreetAddress { get; internal set; } = string.Empty;
     public string PostalCode { get; internal set; } = string.Empty;
     public string City { get; internal set; } = string.Empty;
