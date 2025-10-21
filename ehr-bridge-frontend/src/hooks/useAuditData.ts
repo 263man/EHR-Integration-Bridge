@@ -82,7 +82,7 @@ export const useAuditData = () => {
         throw new Error(`Reseed API failed: ${response.status} - ${response.statusText}`);
       }
       
-      alert(`Data reseeded successfully (${SEEDED_RECORD_COUNT} records). Run Audit next.`);
+      //alert(`Data reseeded successfully (${SEEDED_RECORD_COUNT} records). Run Audit next.`);
       
       // FIX: Use the new reseedSuccessData state instead of initialData
       setData(reseedSuccessData); 
