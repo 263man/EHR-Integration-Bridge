@@ -1,26 +1,75 @@
-// ehr-bridge-frontend/src/App.tsx
 import './App.css';
 import useAuditData from './hooks/useAuditData';
+import { useMemo } from 'react';
+
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { Doughnut } from 'react-chartjs-2';
+
+import type {
+  ChartOptions,
+  ChartData,
+  TooltipItem,
+} from 'chart.js';
+
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 const DataQualityChart = ({ complete, incomplete }: { complete: number, incomplete: number }) => {
   const total = complete + incomplete;
-  const completePercent = total > 0 ? ((complete / total) * 100).toFixed(1) : 0;
+  const completePercent = total > 0 ? ((complete / total) * 100).toFixed(1) : '0';
+
+  const data: ChartData<'doughnut'> = useMemo(() => ({
+    labels: ['Complete', 'Incomplete'],
+    datasets: [
+      {
+        data: [complete, incomplete],
+        backgroundColor: ['#4caf50', '#f44336'],
+        borderColor: ['#ffffff', '#ffffff'],
+        borderWidth: 2,
+      },
+    ],
+  }), [complete, incomplete]);
+
+  const options: ChartOptions<'doughnut'> = useMemo(() => ({
+    cutout: '60%',
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: {
+          color: '#343a40',
+          font: {
+            size: 14,
+            weight: 'bold',
+          },
+        },
+      },
+      tooltip: {
+        callbacks: {
+          label: (context: TooltipItem<'doughnut'>) => {
+            const value = context.raw as number;
+            const label = context.label || '';
+            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0';
+            return `${label}: ${value} (${percentage}%)`;
+          },
+        },
+      },
+    },
+    maintainAspectRatio: false,
+  }), [total]);
 
   return (
     <div className="chart-container">
       <h3>Data Completeness Ratio</h3>
-      <div className="chart-placeholder">
-        <p>
-          **[Doughnut Chart Placeholder]**
-          <br />
-          Complete: {complete} ({completePercent}%)
-          <br />
-          Incomplete: {incomplete}
-        </p>
-        <p className="chart-tip">
-          **Plan:** This space will hold a `react-chartjs-2` Doughnut chart to visually display the ratio of **Complete vs. Incomplete** records upon the next committed change.
-        </p>
+      <div style={{ height: '300px' }}>
+        <Doughnut data={data} options={options} />
       </div>
+      <p style={{ textAlign: 'center', marginTop: '10px' }}>
+        {complete} complete / {incomplete} incomplete ({completePercent}% complete)
+      </p>
     </div>
   );
 };
@@ -40,10 +89,8 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* ✅ Always show title */}
       <h1 className="app-title">EHR Data Audit Dashboard</h1>
 
-      {/* ✅ Always show control panel */}
       <div className="controls-panel">
         <h2>Control Panel</h2>
         {loading && (
@@ -57,10 +104,10 @@ function App() {
             <h3>Data and Audit Control</h3>
             <div className="control-group">
               <button onClick={reseedData} disabled={loading} className="btn-primary">
-                🔁 Reseed Data (POST /control/reseed)
+                🔁 Reseed Data
               </button>
               <button onClick={runAudit} disabled={loading} className="btn-primary">
-                🔎 Run Audit (GET /api/audit)
+                🔎 Run Audit
               </button>
             </div>
           </div>
@@ -83,7 +130,6 @@ function App() {
         </div>
       </div>
 
-      {/* ✅ Show error only if present */}
       {error && (
         <div className="error">
           <h2>Error Occurred!</h2>
@@ -94,7 +140,6 @@ function App() {
         </div>
       )}
 
-      {/* ✅ Wrap data section in a scrollable container */}
       <div className="dashboard-scrollable-area">
         {data && !error && (
           <>

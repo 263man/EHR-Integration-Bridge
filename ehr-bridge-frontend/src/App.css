@@ -19,11 +19,17 @@
   --border-radius-md: 8px;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
-  min-height: 100%; /* allow page to grow naturally */
-  background: linear-gradient(135deg, var(--color-purple-light) 0%, var(--color-blue-light) 50%, var(--color-teal-light) 100%);
+  min-height: 100%;
+  background: linear-gradient(
+    135deg,
+    var(--color-purple-light) 0%,
+    var(--color-blue-light) 50%,
+    var(--color-teal-light) 100%
+  );
   background-attachment: fixed;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   color: var(--text-color);
@@ -36,10 +42,9 @@ html, body {
   text-align: center;
   position: relative;
   z-index: 1;
-  /* Removed height: 100vh and display: flex */
-  /* Allow content to grow and scroll normally */
 }
 
+/* --- App Container --- */
 .app-container {
   background: var(--color-white-translucent);
   border-radius: var(--border-radius-lg);
@@ -53,7 +58,7 @@ html, body {
   flex-direction: column;
 }
 
-/* Sticky Title */
+/* --- Sticky Title --- */
 .app-title {
   position: sticky;
   top: 0;
@@ -64,16 +69,16 @@ html, body {
   font-size: 2.5em;
   font-weight: 700;
   color: var(--text-color);
-  text-shadow: 1px 1px 2px rgba(0,0,0,0.05);
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-/* Sticky Controls */
+/* --- Sticky Controls --- */
 .controls-panel {
   position: sticky;
   top: 80px;
   z-index: 9;
   background: var(--color-white-more-translucent);
-  padding: 15px 20px; /* 👈 Reduced padding */
+  padding: 15px 20px;
   border-radius: var(--border-radius-md);
   box-shadow: var(--glass-shadow);
   backdrop-filter: blur(calc(var(--backdrop-blur) / 2));
@@ -81,16 +86,16 @@ html, body {
   margin-bottom: 35px;
 }
 
-/* Scrollable dashboard content */
+/* --- Scrollable dashboard --- */
 .dashboard-scrollable-area {
-  /* 👇 REMOVE internal scrollbar, make content flow with page */
   flex: unset;
   overflow: visible;
   padding-right: 0;
 }
 
-/* Headings */
-h2, h3 {
+/* --- Headings --- */
+h2,
+h3 {
   color: var(--text-color);
   border-bottom: 1px solid rgba(255, 255, 255, 0.4);
   padding-bottom: 10px;
@@ -148,6 +153,7 @@ button {
 .btn-primary {
   background: linear-gradient(145deg, #a18cd6, #8c73e0);
 }
+
 .btn-primary:hover:enabled {
   transform: translateY(-2px) scale(1.02);
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
@@ -156,6 +162,7 @@ button {
 .btn-export {
   background: linear-gradient(145deg, #7ad7f0, #63b3ed);
 }
+
 .btn-export:hover:enabled {
   transform: translateY(-2px) scale(1.02);
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
@@ -192,6 +199,9 @@ button:disabled {
   backdrop-filter: blur(calc(var(--backdrop-blur) / 2));
   border: var(--glass-border);
   min-height: 400px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .chart-container h3 {
@@ -215,7 +225,13 @@ button:disabled {
   padding: 10px;
 }
 
-/* Cards */
+.chart-tip {
+  font-size: 0.95em;
+  color: var(--text-color-light);
+  margin-top: 12px;
+}
+
+/* --- Cards --- */
 .card {
   background: var(--color-white-more-translucent);
   border-left: 5px solid var(--color-blue-light);
@@ -227,10 +243,12 @@ button:disabled {
   transition: all 0.3s ease;
   text-align: center;
 }
+
 .card:hover {
   transform: translateY(-3px);
   box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
 }
+
 .card h2 {
   border-bottom: none;
   margin-top: 0;
@@ -238,10 +256,12 @@ button:disabled {
   font-weight: 500;
   color: var(--text-color-light);
 }
+
 .card.alert {
   border-left-color: var(--alert-color);
   background: rgba(255, 240, 240, 0.6);
 }
+
 .metric {
   font-size: 3em;
   font-weight: 700;
@@ -268,7 +288,8 @@ button:disabled {
   box-shadow: var(--glass-shadow);
 }
 
-.audit-table th, .audit-table td {
+.audit-table th,
+.audit-table td {
   border: 1px solid rgba(255, 255, 255, 0.5);
   padding: 14px 18px;
   text-align: left;
@@ -286,10 +307,12 @@ button:disabled {
 .audit-table tr:nth-child(even) {
   background-color: var(--color-white-more-translucent);
 }
+
 .audit-table tr:hover {
   background-color: rgba(255, 255, 255, 0.8);
 }
 
+/* --- Error Message --- */
 .error {
   color: var(--alert-color);
   background-color: rgba(255, 240, 240, 0.8);
@@ -299,7 +322,7 @@ button:disabled {
   border: 1px solid var(--alert-color);
 }
 
-/* --- Responsive --- */
+/* --- Responsive Layout --- */
 @media (max-width: 1200px) {
   .dashboard-visualisation-area {
     grid-template-columns: 1fr;
@@ -311,6 +334,7 @@ button:disabled {
     flex-direction: column;
     gap: 20px;
   }
+
   .control-section {
     flex: 1 1 100%;
   }

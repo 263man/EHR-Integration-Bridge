@@ -59,7 +59,11 @@
 │   ├── FhirPatientRecord.cs
 │   └── Program.cs
 ├── .gitignore
+├── .gitpod.yml
 ├── Hapi_Fhir_Patient_Export.csv
-└── output/
-    ├── Full_Patient_Export.csv
-    └── Incomplete_Demographics_Audit_List.csv
+├── output/
+│   ├── Full_Patient_Export.csv
+│   └── Incomplete_Demographics_Audit_List.csv
+└── .vscode/
+    ├── launch.json
+    └── tasks.json
