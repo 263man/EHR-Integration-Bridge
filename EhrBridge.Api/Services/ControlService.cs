@@ -1,7 +1,7 @@
 using EhrBridge.Api.DataGeneration;
 using MySql.Data.MySqlClient;
 using Microsoft.Extensions.Configuration;
-using EhrBridge.Api.Models;
+// Removed: using EhrBridge.Api.Models; // This namespace is now empty/obsolete
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -11,6 +11,7 @@ namespace EhrBridge.Api.Services;
 /// <summary>
 /// Business logic for controlling database operations such as reseeding.
 /// Audit is now fully decoupled.
+/// Includes automatic schema alignment for OpenEMR compatibility.
 /// </summary>
 public class ControlService : IControlService
 {
@@ -31,7 +32,7 @@ public class ControlService : IControlService
         TestDbConnection();
     }
 
-    // Test database connection synchronously on service startup
+    // Ensure DB connectivity early
     private void TestDbConnection()
     {
         try
@@ -48,18 +49,53 @@ public class ControlService : IControlService
     }
 
     /// <summary>
-    /// Cleans the patient_data table and inserts 1000 demo records.
-    /// Audit is intentionally NOT triggered here.
+    /// Cleans the patient_data table, aligns schema, and inserts 1000 demo records.
+    /// Audit remains intentionally decoupled.
     /// </summary>
     public async Task ReSeedDemoDataAsync()
     {
         _logger.LogInformation("ReSeedDemoDataAsync started.");
+
+        // Always ensure table schema allows NULL for phone_cell
+        await EnsurePhoneCellNullableAsync();
 
         await TruncatePatientDataAsync();
         var patients = PatientDataGenerator.GeneratePatients(SeedCount, StartPid);
         await InsertPatientDataAsync(patients);
 
         _logger.LogInformation("ReSeedDemoDataAsync completed successfully.");
+    }
+
+    /// <summary>
+    /// Ensures the patient_data.phone_cell column is nullable to support generated data.
+    /// </summary>
+    private async Task EnsurePhoneCellNullableAsync()
+    {
+        const string sql =
+            @"ALTER TABLE patient_data MODIFY phone_cell VARCHAR(255) NULL;";
+
+        try
+        {
+            using var connection = new MySqlConnection(_connectionString);
+            await connection.OpenAsync();
+
+            using var command = new MySqlCommand(sql, connection);
+            await command.ExecuteNonQueryAsync();
+
+            _logger.LogInformation("Ensured patient_data.phone_cell is nullable.");
+        }
+        catch (Exception ex)
+        {
+            // Suppress benign errors if already NULL
+            if (ex.Message.Contains("Invalid default value") || ex.Message.Contains("NULL"))
+            {
+                _logger.LogWarning("Column phone_cell already nullable or migration not required: {Message}", ex.Message);
+                return;
+            }
+
+            _logger.LogError(ex, "Error ensuring patient_data.phone_cell is nullable.");
+            throw;
+        }
     }
 
     private async Task TruncatePatientDataAsync()
@@ -88,9 +124,9 @@ public class ControlService : IControlService
     {
         const string insertSql =
             @"INSERT INTO patient_data 
-              (pid, lname, fname, DOB, sex, street, city, state, postal_code, phone_cell, SS)
-              VALUES
-              (@pid, @lname, @fname, @DOB, @sex, @street, @city, @state, @postal_code, @phone_cell, @SS);";
+             (pid, lname, fname, DOB, sex, street, city, state, postal_code, phone_cell, SS)
+             VALUES
+             (@pid, @lname, @fname, @DOB, @sex, @street, @city, @state, @postal_code, @phone_cell, @SS);";
 
         try
         {

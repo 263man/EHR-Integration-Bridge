@@ -1,3 +1,4 @@
+// EhrBridge.Api/Program.cs
 using EhrBridge.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,6 +11,8 @@ builder.Services.AddControllers();
 builder.Services.AddScoped<IAuditService, AuditService>();
 // 2. Control Service (new service, also interface-driven)
 builder.Services.AddScoped<IControlService, ControlService>();
+// 3. EXPORT Service (NEW registration for CSV exports)
+builder.Services.AddScoped<IExportService, ExportService>();
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
