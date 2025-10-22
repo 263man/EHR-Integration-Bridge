@@ -92,7 +92,7 @@ function App() {
       <h1 className="app-title">EHR Data Audit Dashboard</h1>
 
       <div className="controls-panel">
-        <h2>Control Panel</h2>
+        
         {loading && (
           <div style={{ color: 'var(--text-color)', marginBottom: '10px' }}>
             Processing request...
@@ -113,17 +113,17 @@ function App() {
           </div>
 
           <div className="control-section">
-            <h3>Export Actions</h3>
+            <h3>Export as CSV</h3>
             <div className="control-group">
               <button onClick={downloadAllCsv} disabled={loading || !data} className="btn-export">
-                ⬇️ Download CSV (All)
+                ⬇️ All Records
               </button>
               <button
                 onClick={downloadIncompleteCsv}
                 disabled={loading || !data || data.incompleteRecordsFound === 0}
                 className="btn-export"
               >
-                ⬇️ Download CSV (Incomplete)
+                ⬇️ Incomplete Records
               </button>
             </div>
           </div>
@@ -158,7 +158,7 @@ function App() {
                 {data.totalRecordsScanned > 0 && (
                   <div className="card">
                     <h2>Audit Last Run</h2>
-                    <p className="metric">{data.lastRunTimestamp}</p>
+                    <p className="metric small">{data.lastRunTimestamp}</p>
                   </div>
                 )}
               </div>

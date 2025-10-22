@@ -121,6 +121,7 @@ hr {
 .control-section {
   flex: 1 1 45%;
   min-width: 280px;
+  text-align: center;
 }
 
 .control-section h3 {
@@ -269,6 +270,14 @@ button:disabled {
   margin: 10px 0 0 0;
   line-height: 1;
 }
+
+.metric.small {
+  font-size: 1.5em;
+  font-weight: 500;
+    color: var(--text-color);
+
+}
+
 
 /* --- Audit Table --- */
 .audit-table-wrapper {
