@@ -1,5 +1,3 @@
-/* ehr-bridge-frontend/src/App.css */
-
 /* --- Variables and General Layout --- */
 :root {
   --color-purple-light: #d6a1d4;
@@ -56,6 +54,26 @@ body {
   margin: 20px auto;
   display: flex;
   flex-direction: column;
+  transition: padding 0.3s ease-in-out, background 0.3s ease-in-out;
+}
+
+/* --- Header Collapse Effect --- */
+.header-collapsed .app-title,
+.header-collapsed .controls-panel {
+  max-height: 0 !important;
+  opacity: 0;
+  transform: scaleY(0);
+  overflow: hidden;
+  transition: max-height 0.4s ease-in-out,
+              opacity 0.4s ease-in-out,
+              transform 0.4s ease-in-out;
+}
+
+.app-title,
+.controls-panel {
+  transition: max-height 0.4s ease-in-out,
+              opacity 0.4s ease-in-out,
+              transform 0.4s ease-in-out;
 }
 
 /* --- Sticky Title --- */
@@ -70,6 +88,8 @@ body {
   font-weight: 700;
   color: var(--text-color);
   text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.05);
+  max-height: 200px;
+  overflow: hidden;
 }
 
 /* --- Sticky Controls --- */
@@ -83,13 +103,18 @@ body {
   box-shadow: var(--glass-shadow);
   backdrop-filter: blur(calc(var(--backdrop-blur) / 2));
   border: var(--glass-border);
-  margin-bottom: 35px;
+
+  /* reduce bottom margin to bring content closer */
+  margin-bottom: 20px;
+
+  max-height: 500px;
+  overflow: hidden;
 }
 
 /* --- Scrollable dashboard --- */
 .dashboard-scrollable-area {
-  flex: unset;
-  overflow: visible;
+  flex: 1 1 auto;
+  overflow-y: auto;
   padding-right: 0;
 }
 
@@ -121,7 +146,6 @@ hr {
 .control-section {
   flex: 1 1 45%;
   min-width: 280px;
-  text-align: center;
 }
 
 .control-section h3 {
@@ -157,7 +181,7 @@ button {
 
 .btn-primary:hover:enabled {
   transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 6px 12px rgba(0, 0, 0.15);
 }
 
 .btn-export {
@@ -166,7 +190,7 @@ button {
 
 .btn-export:hover:enabled {
   transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 6px 12px rgba(0, 0.15);
 }
 
 button:disabled {
@@ -226,12 +250,6 @@ button:disabled {
   padding: 10px;
 }
 
-.chart-tip {
-  font-size: 0.95em;
-  color: var(--text-color-light);
-  margin-top: 12px;
-}
-
 /* --- Cards --- */
 .card {
   background: var(--color-white-more-translucent);
@@ -241,13 +259,13 @@ button:disabled {
   box-shadow: var(--glass-shadow);
   backdrop-filter: blur(calc(var(--backdrop-blur) / 2));
   border: var(--glass-border);
-  transition: all 0.3s ease;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
   text-align: center;
 }
 
 .card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 6px 15px rgba(0, 0, 0.1);
 }
 
 .card h2 {
@@ -274,10 +292,8 @@ button:disabled {
 .metric.small {
   font-size: 1.5em;
   font-weight: 500;
-    color: var(--text-color);
-
+  color: var(--text-color);
 }
-
 
 /* --- Audit Table --- */
 .audit-table-wrapper {
@@ -285,7 +301,7 @@ button:disabled {
   overflow-y: auto;
   margin-top: 20px;
   border-radius: var(--border-radius-md);
-  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.1);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0.1);
 }
 
 .audit-table {
@@ -346,5 +362,14 @@ button:disabled {
 
   .control-section {
     flex: 1 1 100%;
+  }
+
+  .app-title {
+    font-size: 2em;
+    padding: 15px 0;
+  }
+
+  .controls-panel {
+    padding: 10px 15px;
   }
 }
