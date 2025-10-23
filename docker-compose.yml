@@ -54,7 +54,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: ehrbridge_api
-    restart: on-failure
+    restart: always
     # 🛑 FIX: Removed 'api/' path. The DLL is published to the container root /app.
     command: ["dotnet", "EhrBridge.Api.dll"]
     ports:
@@ -66,9 +66,6 @@ services:
     environment:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__EhrDatabase=Server=mariadb;Database=openemr;User Id=openemr;Password=openemrpass;
-
-# The ehrbridge_worker service block has been removed. Its functionality (WORKER_MODE=Sync/Extract)
-# is being migrated into the persistent ehrbridge_api service.
 
 networks:
   ehr_network:
