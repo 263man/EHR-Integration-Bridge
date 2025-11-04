@@ -11,12 +11,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Decode SSH key
+        run: |
+          echo "${{ secrets.VM_KEY_BASE64 }}" | base64 -d > private_key
+          chmod 600 private_key
+
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_KEY }}
+          key_path: private_key
           script: |
             cd ~/EHR-Integration-Bridge
             git pull origin main
