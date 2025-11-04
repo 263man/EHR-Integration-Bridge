@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 
 // ✅ Use full backend URLs for production
-const API_BASE = 'http://132.226.149.98:8080/api';
-const EXPORT_BASE = 'http://132.226.149.98:8080/export';
+const API_BASE = 'https://ehrbridgeapi.kepekepe.com/api';
+const EXPORT_BASE = 'https://ehrbridgeapi.kepekepe.com/export';
 
 // CONSTANT: Expected number of records after a successful reseed operation
 const SEEDED_RECORD_COUNT = 1000;
