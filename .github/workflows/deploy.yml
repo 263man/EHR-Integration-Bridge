@@ -11,19 +11,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Decode SSH key
+      - name: Display VM_KEY secret (for debugging)
         run: |
-          echo "${{ secrets.VM_KEY3 }}" | tr -d '\r\n' | base64 --decode > private_key
-          chmod 600 private_key
-          echo "Decoded private key header:"
-          head -n 3 private_key
+          echo "The VM_KEY secret length is: ${{ secrets.VM_KEY }}"
 
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
-          key_path: private_key
+          key: ${{ secrets.VM_KEY }}
           script: |
             cd ~/EHR-Integration-Bridge
             git pull origin main
