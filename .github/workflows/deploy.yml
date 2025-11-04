@@ -7,13 +7,14 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Decode SSH key
         run: |
-          echo "${{ secrets.VM_KEY_BASE64 }}" | base64 -d > private_key
+          echo "${{ secrets.VM_KEY3 }}" | base64 -d > private_key
           chmod 600 private_key
 
       - name: Deploy over SSH
