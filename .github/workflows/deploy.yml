@@ -54,13 +54,13 @@ jobs:
       - name: Ensure remote project dir exists
         run: |
           ssh -i private_key.pem -o StrictHostKeyChecking=no \
-            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'SSH_EOF'
+            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'EOF'
             set -eux
             TARGET_DIR="/home/${USER}/EHR-Integration-Bridge"
             mkdir -p "$TARGET_DIR"
             chown ${USER}:${USER} "$TARGET_DIR"
             echo "Remote dir ready: $TARGET_DIR"
-SSH_EOF
+EOF
 
       - name: Rsync project to VM
         run: |
@@ -75,9 +75,8 @@ SSH_EOF
         run: |
           echo "Running remote deployment commands..."
           ssh -i private_key.pem -o StrictHostKeyChecking=no \
-            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'SSH_EOF'
+            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'EOF'
             set -euxo pipefail
-
             PROJECT_DIR="/home/${USER}/EHR-Integration-Bridge"
             cd "$PROJECT_DIR"
 
@@ -96,7 +95,7 @@ SSH_EOF
               docker compose logs --tail=50
               exit 3
             fi
-SSH_EOF
+EOF
 
       - name: Final success summary
         run: echo "🎉 Deployment workflow finished successfully."
