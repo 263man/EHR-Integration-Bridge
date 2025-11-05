@@ -48,7 +48,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key_path: private_key.pem
           port: 22
-          timeout: 60s            # ✅ FIXED (must include unit)
+          timeout: 60s
           script_stop: true
           debug: true
           script: |
@@ -56,7 +56,7 @@ jobs:
             echo "Current directory: $(pwd)"
             echo "Listing files:"
             ls -la
-            cd ~/EHR-Integration-Bridge
+            cd /home/ubuntu/EHR-Integration-Bridge   # ✅ Corrected project path
             echo "Pulling latest changes..."
             git fetch origin main
             git reset --hard origin/main
