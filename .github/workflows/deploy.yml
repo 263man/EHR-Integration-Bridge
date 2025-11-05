@@ -48,4 +48,85 @@ jobs:
         run: |
           echo "[$(date -u)] Attempting SSH connection test..."
           ssh -vvv -i private_key.pem \
-            -o
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null \
+            -o ConnectTimeout=10 \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo '✅ SSH handshake succeeded.'"
+
+      # 6️⃣ Ensure remote project directory
+      - name: Ensure remote project directory exists
+        run: |
+          echo "[$(date -u)] Ensuring remote directory /home/${{ secrets.VM_USER }}/EHR-Integration-Bridge exists..."
+          ssh -i private_key.pem -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'EOF'
+            set -euxo pipefail
+            TARGET_DIR="/home/${USER}/EHR-Integration-Bridge"
+            mkdir -p "$TARGET_DIR"
+            echo "✅ Directory ensured: $TARGET_DIR"
+            ls -ld "$TARGET_DIR"
+            df -h "$TARGET_DIR" || true
+          EOF
+
+      # 7️⃣ Rsync project to VM
+      - name: Rsync project files
+        run: |
+          echo "[$(date -u)] Starting rsync..."
+          rsync -avz --delete \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            -e "ssh -i private_key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10" \
+            ./ ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/${{ secrets.VM_USER }}/EHR-Integration-Bridge/
+          echo "[$(date -u)] ✅ Rsync completed."
+
+      # 8️⃣ Deploy remotely with full debug
+      - name: Remote deploy with docker-compose (full trace)
+        run: |
+          echo "[$(date -u)] Executing remote docker-compose deployment..."
+          ssh -i private_key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'EOF'
+            set -euxo pipefail
+            export PATH=$PATH:/usr/bin
+            PROJECT_DIR="/home/${USER}/EHR-Integration-Bridge"
+            COMPOSE_BIN="/usr/bin/docker-compose"
+
+            echo "=== ENVIRONMENT CHECK ==="
+            whoami
+            uname -a
+            which docker || echo "docker not in PATH"
+            which docker-compose || echo "docker-compose not in PATH"
+            $COMPOSE_BIN version || echo "compose version unavailable"
+
+            echo "=== PROJECT DIR VALIDATION ==="
+            cd "$PROJECT_DIR"
+            pwd
+            ls -la
+
+            echo "=== STOPPING OLD CONTAINERS ==="
+            $COMPOSE_BIN down --remove-orphans || true
+
+            echo "=== BUILDING & STARTING CONTAINERS ==="
+            $COMPOSE_BIN up -d --build
+
+            echo "=== CONTAINER STATUS ==="
+            docker ps -a || true
+
+            echo "=== WAITING 10s FOR SERVICES ==="
+            sleep 10
+
+            echo "=== VERIFYING BACKEND API LOCALLY ==="
+            if curl -s --fail http://localhost:8080/swagger/v1/swagger.json -o /tmp/swagger.json; then
+              echo "✅ Swagger reachable"
+              stat -c '%s bytes' /tmp/swagger.json
+            else
+              echo "❌ Swagger not reachable. Dumping logs..."
+              $COMPOSE_BIN logs --tail=100 || true
+              exit 3
+            fi
+
+            echo "=== SUCCESS ==="
+            date -u
+          EOF
+
+      # 9️⃣ Final success message
+      - name: Deployment summary
+        run: |
+          echo "[$(date -u)] ✅ Deployment finished successfully."
