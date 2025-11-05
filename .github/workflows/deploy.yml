@@ -18,121 +18,85 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create private key file (preserve newlines, remove CR)
+      - name: Create private key file (preserve newlines)
         run: |
           echo "Creating private key file..."
-          # Write secret to file and strip CR characters (Windows -> Unix)
           echo "${{ secrets.VM_KEY }}" | awk '{gsub(/\\n/,"\n")}1' > private_key.pem
           chmod 600 private_key.pem
-          echo "Private key file created: $(ls -l private_key.pem)"
-          echo "Showing header / footer for verification (safe):"
+          echo "Private key file created:"
           head -n 3 private_key.pem || true
           tail -n 3 private_key.pem || true
 
-      - name: Validate SSH key works locally (quick test)
+      - name: Validate SSH key works locally
         run: |
           echo "Testing local parsing of private key..."
-          if ssh-keygen -y -f private_key.pem > /dev/null 2>&1; then
-            echo "✅ Private key is a valid SSH private key."
+          if ssh-keygen -y -f private_key.pem >/dev/null 2>&1; then
+            echo "✅ Private key is valid."
           else
             echo "❌ Private key parsing failed."
             exit 1
           fi
 
-      - name: Check SSH port reachability from runner
+      - name: Check SSH port reachability
         run: |
-          echo "Checking TCP connect to ${{ secrets.VM_HOST }}:22 (timeout 8s)..."
+          echo "Checking TCP connect to ${{ secrets.VM_HOST }}:22..."
           timeout 8 bash -c "cat < /dev/null > /dev/tcp/${{ secrets.VM_HOST }}/22" \
             && echo "✅ Port 22 reachable" \
-            || (echo "❌ Port 22 NOT reachable from runner — check security lists / IGW / VM public IP" && exit 2)
+            || (echo "❌ Port 22 not reachable" && exit 2)
 
-      - name: Test SSH handshake (verbose)
+      - name: Test SSH handshake
         run: |
-          echo "Attempting SSH handshake (verbose)…"
-          ssh -vvv -i private_key.pem -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo 'SSH OK from runner'"
+          echo "Testing SSH handshake..."
+          ssh -vvv -i private_key.pem -o BatchMode=yes -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo '✅ SSH OK'"
 
-      - name: Ensure remote project dir exists (create if missing)
+      - name: Ensure remote project dir exists
         run: |
-          echo "Ensuring remote project directory exists and ownership is ok..."
-          ssh -i private_key.pem -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'SSH_EOF'
-            set -euxo pipefail
+          ssh -i private_key.pem -o StrictHostKeyChecking=no \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'SSH_EOF'
+            set -eux
             TARGET_DIR="/home/${USER}/EHR-Integration-Bridge"
-            if [ ! -d "$TARGET_DIR" ]; then
-              echo "Remote dir missing -> creating $TARGET_DIR"
-              mkdir -p "$TARGET_DIR"
-              chown ${USER}:${USER} "$TARGET_DIR"
-            else
-              echo "Remote dir exists: $TARGET_DIR"
-            fi
-            echo "Remote disk usage:"
-            df -h .
-            echo "Listing remote dir:"
-            ls -la "$TARGET_DIR"
-          SSH_EOF
+            mkdir -p "$TARGET_DIR"
+            chown ${USER}:${USER} "$TARGET_DIR"
+            echo "Remote dir ready: $TARGET_DIR"
+SSH_EOF
 
-      - name: Rsync project to VM (excludes node_modules & .git)
+      - name: Rsync project to VM
         run: |
-          echo "Syncing repository to remote host with rsync..."
+          echo "Syncing repository..."
           rsync -avz --delete \
-            --exclude '.git' \
             --exclude 'node_modules' \
-            -e "ssh -o StrictHostKeyChecking=no -i private_key.pem -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10" \
+            -e "ssh -o StrictHostKeyChecking=no -i private_key.pem -o ConnectTimeout=10" \
             ./ ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/${{ secrets.VM_USER }}/EHR-Integration-Bridge/
-          echo "Rsync done."
+          echo "✅ Rsync complete."
 
-      - name: Remote deploy commands (with verification)
+      - name: Remote deploy commands
         run: |
-          echo "Running remote deployment commands (docker compose) with verbose output..."
-          ssh -i private_key.pem -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'SSH_EOF'
+          echo "Running remote deployment commands..."
+          ssh -i private_key.pem -o StrictHostKeyChecking=no \
+            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'SSH_EOF'
             set -euxo pipefail
 
             PROJECT_DIR="/home/${USER}/EHR-Integration-Bridge"
-            if [ ! -d "$PROJECT_DIR" ]; then
-              echo "ERROR: project dir not found: $PROJECT_DIR"
-              exit 2
-            fi
-
             cd "$PROJECT_DIR"
 
-            # Show git status for debugging
-            echo "GIT HEAD and latest commit:"
-            git rev-parse --short HEAD || true
-            git status --porcelain || true
-            git branch --show-current || true
+            echo "Using docker compose..."
+            docker compose down --remove-orphans || true
+            docker compose up -d --build
 
-            # Detect docker compose command
-            if docker compose version >/dev/null 2>&1; then
-              DOCKER_COMPOSE_CMD="docker compose"
-            else
-              DOCKER_COMPOSE_CMD="docker-compose"
-            fi
-            echo "Using: $DOCKER_COMPOSE_CMD"
-
-            echo "Stopping old containers (best-effort)..."
-            $DOCKER_COMPOSE_CMD down --remove-orphans || true
-
-            echo "Building and starting containers..."
-            $DOCKER_COMPOSE_CMD up -d --build
-
-            echo "Waiting 6s for services to settle..."
+            echo "Waiting 6s for services to start..."
             sleep 6
 
             if curl -s --fail http://localhost:8080/swagger/v1/swagger.json -o /tmp/swagger.json; then
-              echo "✅ Backend API swagger reachable (local)."
-              echo "Swagger size: $(stat -c%s /tmp/swagger.json) bytes"
+              echo "✅ Backend API reachable."
             else
-              echo "❌ Backend API swagger NOT reachable (check container health / logs)."
-              echo "==== docker ps ===="
-              docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
-              echo "==== recent logs (api container) ===="
-              docker-compose logs --tail=50 || true
+              echo "❌ Backend API not reachable — showing logs:"
+              docker compose ps
+              docker compose logs --tail=50
               exit 3
             fi
-
-            echo "Deployment completed successfully on remote host."
-          SSH_EOF
+SSH_EOF
 
       - name: Final success summary
-        run: |
-          echo "Deployment workflow finished successfully."
+        run: echo "🎉 Deployment workflow finished successfully."
