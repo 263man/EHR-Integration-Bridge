@@ -16,7 +16,7 @@ jobs:
 
       # 2️⃣ Setup SSH agent to connect to your Oracle VM
       - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.8.1
+        uses: webfactory/ssh-agent@v0.8.2
         with:
           ssh-private-key: ${{ secrets.EHR_SSH_KEY }}
 
