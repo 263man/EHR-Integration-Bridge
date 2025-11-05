@@ -22,7 +22,7 @@ jobs:
         run: |
           echo "Creating private key file..."
           # Write secret to file and strip CR characters (Windows -> Unix)
-          printf '%s' "${{ secrets.VM_KEY }}" | tr -d '\r' > private_key.pem
+          echo "${{ secrets.VM_KEY }}" | awk '{gsub(/\\n/,"\n")}1' > private_key.pem
           chmod 600 private_key.pem
           echo "Private key file created: $(ls -l private_key.pem)"
           echo "Showing header / footer for verification (safe):"
