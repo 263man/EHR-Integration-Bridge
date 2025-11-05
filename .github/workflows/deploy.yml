@@ -69,7 +69,7 @@ jobs:
             df -h .
             echo "Listing remote dir:"
             ls -la "$TARGET_DIR"
-SSH_EOF
+          SSH_EOF
 
       - name: Rsync project to VM (excludes node_modules & .git)
         run: |
@@ -134,8 +134,8 @@ SSH_EOF
             fi
 
             echo "Deployment completed successfully on remote host."
-SSH_EOF
+          SSH_EOF
 
       - name: Final success summary
         run: |
-          echo "Deployment workflow finished."
+          echo "Deployment workflow finished successfully."
