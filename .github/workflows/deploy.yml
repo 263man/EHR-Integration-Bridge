@@ -7,10 +7,7 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to Oracle VM (with verbose debug)
     runs-on: ubuntu-latest
-    env:
-      ACTIONS_STEP_DEBUG: true
 
     steps:
       - name: Checkout repository
@@ -18,84 +15,44 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create private key file (preserve newlines)
+      - name: Create private key file
         run: |
-          echo "Creating private key file..."
           echo "${{ secrets.VM_KEY }}" | awk '{gsub(/\\n/,"\n")}1' > private_key.pem
           chmod 600 private_key.pem
-          echo "Private key file created:"
-          head -n 3 private_key.pem || true
-          tail -n 3 private_key.pem || true
-
-      - name: Validate SSH key works locally
-        run: |
-          echo "Testing local parsing of private key..."
-          if ssh-keygen -y -f private_key.pem >/dev/null 2>&1; then
-            echo "✅ Private key is valid."
-          else
-            echo "❌ Private key parsing failed."
-            exit 1
-          fi
-
-      - name: Check SSH port reachability
-        run: |
-          echo "Checking TCP connect to ${{ secrets.VM_HOST }}:22..."
-          timeout 8 bash -c "cat < /dev/null > /dev/tcp/${{ secrets.VM_HOST }}/22" \
-            && echo "✅ Port 22 reachable" \
-            || (echo "❌ Port 22 not reachable" && exit 2)
 
       - name: Test SSH handshake
         run: |
-          echo "Testing SSH handshake..."
-          ssh -vvv -i private_key.pem -o BatchMode=yes -o StrictHostKeyChecking=no \
+          ssh -i private_key.pem -o BatchMode=yes -o StrictHostKeyChecking=no \
             -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null \
-            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo '✅ SSH OK'"
+            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo 'SSH OK'"
 
-      - name: Ensure remote project dir exists
+      - name: Rsync project
         run: |
-          ssh -i private_key.pem -o StrictHostKeyChecking=no \
-            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'EOF'
-            set -eux
-            TARGET_DIR="/home/${USER}/EHR-Integration-Bridge"
-            mkdir -p "$TARGET_DIR"
-            chown ${USER}:${USER} "$TARGET_DIR"
-            echo "Remote dir ready: $TARGET_DIR"
-EOF
-
-      - name: Rsync project to VM
-        run: |
-          echo "Syncing repository..."
           rsync -avz --delete \
             --exclude 'node_modules' \
-            -e "ssh -o StrictHostKeyChecking=no -i private_key.pem -o ConnectTimeout=10" \
+            -e "ssh -o StrictHostKeyChecking=no -i private_key.pem" \
             ./ ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/${{ secrets.VM_USER }}/EHR-Integration-Bridge/
-          echo "✅ Rsync complete."
 
       - name: Remote deploy commands
         run: |
-          echo "Running remote deployment commands..."
-          ssh -i private_key.pem -o StrictHostKeyChecking=no \
-            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'EOF'
-            set -euxo pipefail
-            PROJECT_DIR="/home/${USER}/EHR-Integration-Bridge"
-            cd "$PROJECT_DIR"
+          ssh -i private_key.pem -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'EOF'
+set -euxo pipefail
+PROJECT_DIR="/home/${USER}/EHR-Integration-Bridge"
+cd "$PROJECT_DIR"
 
-            echo "Using docker compose..."
-            docker compose down --remove-orphans || true
-            docker compose up -d --build
+echo "Using docker compose..."
+docker compose down --remove-orphans || true
+docker compose up -d --build
 
-            echo "Waiting 6s for services to start..."
-            sleep 6
+echo "Waiting 6s for services to start..."
+sleep 6
 
-            if curl -s --fail http://localhost:8080/swagger/v1/swagger.json -o /tmp/swagger.json; then
-              echo "✅ Backend API reachable."
-            else
-              echo "❌ Backend API not reachable — showing logs:"
-              docker compose ps
-              docker compose logs --tail=50
-              exit 3
-            fi
+if curl -s --fail http://localhost:8080/swagger/v1/swagger.json -o /tmp/swagger.json; then
+  echo "✅ Backend API reachable."
+else
+  echo "❌ Backend API not reachable — showing logs:"
+  docker compose ps
+  docker compose logs --tail=50
+  exit 3
+fi
 EOF
-
-      - name: Final success summary
-        run: echo "🎉 Deployment workflow finished successfully."
