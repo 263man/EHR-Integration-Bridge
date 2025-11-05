@@ -8,7 +8,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      ACTIONS_STEP_DEBUG: true  # enable GitHub Actions debug logs
+      ACTIONS_STEP_DEBUG: true  # enable debug logs for Actions
 
     steps:
       # 1️⃣ Checkout repository
@@ -48,19 +48,35 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key_path: private_key.pem
           port: 22
-          timeout: 60s
+          timeout: 120s
           script_stop: true
           debug: true
           script: |
             set -ex
+            echo "✅ SSH user: $(whoami)"
+            echo "✅ Home directory: $HOME"
             echo "Current directory: $(pwd)"
-            echo "Listing files:"
+            echo "Listing files in current directory:"
             ls -la
-            cd /home/ubuntu/EHR-Integration-Bridge   # ✅ Corrected project path
+
+            # Change to project directory using dynamic home
+            PROJECT_DIR="$HOME/EHR-Integration-Bridge"
+            if [ ! -d "$PROJECT_DIR" ]; then
+              echo "❌ Project directory $PROJECT_DIR does not exist!"
+              exit 1
+            fi
+            cd "$PROJECT_DIR"
+
             echo "Pulling latest changes..."
             git fetch origin main
             git reset --hard origin/main
+
             echo "Restarting Docker containers..."
-            sudo docker-compose down
-            sudo docker-compose up -d --build
-            echo "✅ Deployment complete."
+            if [ -f docker-compose.yml ]; then
+              sudo docker-compose down
+              sudo docker-compose up -d --build
+              echo "✅ Deployment complete."
+            else
+              echo "❌ docker-compose.yml not found in $PROJECT_DIR"
+              exit 1
+            fi
