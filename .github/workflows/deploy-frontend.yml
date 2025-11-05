@@ -24,12 +24,12 @@ jobs:
           echo "[$(date -u)] Build complete."
 
       - name: Deploy via FTP to Plesk
-        uses: SamKirkland/FTP-Deploy-Action@4.4.0
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.PLESK_HOST }}
           username: ${{ secrets.PLESK_USER }}
           password: ${{ secrets.PLESK_PWD }}
-          port: ${{ secrets.PLESK_PORT }}
+          port: 21
           local-dir: ./ehr-bridge-frontend/dist/
           server-dir: /ehrbridge.kepekepe.com/
           passive: true
