@@ -7,28 +7,55 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      ACTIONS_STEP_DEBUG: true  # enable GitHub Actions debug logs
 
     steps:
+      # 1️⃣ Checkout repository
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # 2️⃣ Write private key to file (preserve newlines, remove CR)
       - name: Write private key to file
         run: |
-          echo "${{ secrets.VM_KEY }}" > private_key.pem
+          echo "Creating private key file..."
+          echo "${{ secrets.VM_KEY }}" | tr -d '\r' > private_key.pem
           chmod 600 private_key.pem
+          ls -l private_key.pem
+          head -n 3 private_key.pem
+          tail -n 3 private_key.pem
 
+      # 3️⃣ Verify SSH port 22 is reachable
+      - name: Check SSH port reachability
+        run: |
+          echo "Checking SSH reachability on ${{ secrets.VM_HOST }}:22"
+          timeout 5 bash -c "cat < /dev/null > /dev/tcp/${{ secrets.VM_HOST }}/22" \
+            && echo "✅ Port 22 reachable" \
+            || echo "❌ Port 22 not reachable (network/firewall issue)"
+
+      # 4️⃣ Test SSH connection with maximum verbosity
       - name: Test SSH connection
         run: |
-          ssh -i private_key.pem -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo 'SSH connection successful'"
+          echo "Testing SSH connection..."
+          ssh -vvv -i private_key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+          ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo '✅ SSH connection successful'"
 
+      # 5️⃣ Deploy via appleboy/ssh-action
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
           key_path: private_key.pem
+          port: 22
+          timeout: 60
+          script_stop: true
+          debug: true
           script: |
-            set -e
+            set -ex
+            echo "Current directory: $(pwd)"
+            echo "Listing files:"
+            ls -la
             cd ~/EHR-Integration-Bridge
             echo "Pulling latest changes..."
             git fetch origin main
@@ -36,4 +63,4 @@ jobs:
             echo "Restarting Docker containers..."
             sudo docker-compose down
             sudo docker-compose up -d --build
-            echo "Deployment complete."
+            echo "✅ Deployment complete."
