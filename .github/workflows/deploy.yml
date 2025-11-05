@@ -1,132 +1,85 @@
-name: Deploy EHR Integration Bridge (Full Debug)
+name: Deploy to Oracle VM (EHR Integration Bridge)
 
 on:
   push:
     branches:
-      - main
+      - "main"
 
 jobs:
   deploy:
-    name: Deploy to Oracle VM (deep debug)
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout repository
-      - name: Checkout repository
+      - name: 📦 Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      # 2️⃣ Write private key file (preserve newlines, remove CR)
-      - name: Prepare SSH private key
+      - name: 🔐 Write private key to file (preserve newlines)
         run: |
-          echo "[$(date -u)] Creating private key file..."
-          echo "${{ secrets.VM_KEY }}" | awk '{gsub(/\\n/,"\n")}1' > private_key.pem
+          echo "[$(date -u)] Writing private key..."
+          echo "${{ secrets.VM_KEY }}" | tr -d '\r' > private_key.pem
           chmod 600 private_key.pem
-          echo "[$(date -u)] ✅ Private key created and permissions set."
-          echo "-----BEGIN HEADER SAMPLE-----"
-          head -n 2 private_key.pem || true
-          echo "-----END FOOTER SAMPLE-----"
-          tail -n 2 private_key.pem || true
+          echo "Private key file written and permissions set."
 
-      # 3️⃣ Validate SSH key syntax
-      - name: Validate SSH key syntax
+      - name: 🔍 Verify SSH connectivity
         run: |
-          echo "[$(date -u)] Validating SSH key format..."
-          ssh-keygen -y -f private_key.pem > /dev/null && echo "✅ SSH key is valid." || (echo "❌ Invalid key format" && exit 1)
-
-      # 4️⃣ Check port 22 reachability
-      - name: Check SSH port reachability
-        run: |
-          echo "[$(date -u)] Checking SSH reachability to ${{ secrets.VM_HOST }}:22 ..."
-          timeout 8 bash -c "cat < /dev/null > /dev/tcp/${{ secrets.VM_HOST }}/22" \
-            && echo "✅ Port 22 reachable" \
-            || (echo "❌ Port 22 not reachable. Check Oracle security lists or ingress rules." && exit 2)
-
-      # 5️⃣ Test SSH handshake (verbose)
-      - name: Test SSH handshake (verbose)
-        run: |
-          echo "[$(date -u)] Attempting SSH connection test..."
+          echo "[$(date -u)] Testing SSH connection to ${{ secrets.VM_HOST }}..."
           ssh -vvv -i private_key.pem \
-            -o BatchMode=yes \
             -o StrictHostKeyChecking=no \
-            -o UserKnownHostsFile=/dev/null \
             -o ConnectTimeout=10 \
-            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo '✅ SSH handshake succeeded.'"
+            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo '✅ SSH connection OK' && hostname && whoami"
 
-      # 6️⃣ Ensure remote project directory
-      - name: Ensure remote project directory exists
-        run: |
-          echo "[$(date -u)] Ensuring remote directory /home/${{ secrets.VM_USER }}/EHR-Integration-Bridge exists..."
-          ssh -i private_key.pem -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'EOF'
+      - name: 🚀 Deploy over SSH with Docker Compose
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key_path: private_key.pem
+          script_stop: true
+          debug: true
+          script: |
             set -euxo pipefail
-            TARGET_DIR="/home/${USER}/EHR-Integration-Bridge"
-            mkdir -p "$TARGET_DIR"
-            echo "✅ Directory ensured: $TARGET_DIR"
-            ls -ld "$TARGET_DIR"
-            df -h "$TARGET_DIR" || true
-          EOF
 
-      # 7️⃣ Rsync project to VM
-      - name: Rsync project files
-        run: |
-          echo "[$(date -u)] Starting rsync..."
-          rsync -avz --delete \
-            --exclude '.git' \
-            --exclude 'node_modules' \
-            -e "ssh -i private_key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10" \
-            ./ ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/${{ secrets.VM_USER }}/EHR-Integration-Bridge/
-          echo "[$(date -u)] ✅ Rsync completed."
-
-      # 8️⃣ Deploy remotely with full debug
-      - name: Remote deploy with docker-compose (full trace)
-        run: |
-          echo "[$(date -u)] Executing remote docker-compose deployment..."
-          ssh -i private_key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'EOF'
-            set -euxo pipefail
-            export PATH=$PATH:/usr/bin
+            echo "=== [$(date -u)] START DEPLOYMENT ==="
             PROJECT_DIR="/home/${USER}/EHR-Integration-Bridge"
             COMPOSE_BIN="/usr/bin/docker-compose"
 
-            echo "=== ENVIRONMENT CHECK ==="
+            echo "-> Checking environment..."
             whoami
+            hostname
             uname -a
-            which docker || echo "docker not in PATH"
-            which docker-compose || echo "docker-compose not in PATH"
-            $COMPOSE_BIN version || echo "compose version unavailable"
+            which docker || echo "docker not found"
+            which docker-compose || echo "docker-compose not found"
+            $COMPOSE_BIN version || echo "compose version check failed"
 
-            echo "=== PROJECT DIR VALIDATION ==="
+            echo "-> Navigating to project directory..."
             cd "$PROJECT_DIR"
             pwd
             ls -la
 
-            echo "=== STOPPING OLD CONTAINERS ==="
-            $COMPOSE_BIN down --remove-orphans || true
+            echo "-> Fetching latest changes..."
+            git fetch origin main
+            git reset --hard origin/main
 
-            echo "=== BUILDING & STARTING CONTAINERS ==="
-            $COMPOSE_BIN up -d --build
+            echo "-> Stopping existing containers..."
+            sudo $COMPOSE_BIN down --remove-orphans || true
 
-            echo "=== CONTAINER STATUS ==="
-            docker ps -a || true
+            echo "-> Building and starting containers..."
+            sudo $COMPOSE_BIN up -d --build
 
-            echo "=== WAITING 10s FOR SERVICES ==="
+            echo "-> Waiting for containers to stabilize..."
             sleep 10
 
-            echo "=== VERIFYING BACKEND API LOCALLY ==="
+            echo "-> Checking running containers..."
+            sudo docker ps -a
+
+            echo "-> Verifying backend health..."
             if curl -s --fail http://localhost:8080/swagger/v1/swagger.json -o /tmp/swagger.json; then
-              echo "✅ Swagger reachable"
+              echo "✅ Backend Swagger reachable"
               stat -c '%s bytes' /tmp/swagger.json
             else
-              echo "❌ Swagger not reachable. Dumping logs..."
-              $COMPOSE_BIN logs --tail=100 || true
+              echo "❌ Backend Swagger not reachable — dumping recent logs"
+              sudo $COMPOSE_BIN logs --tail=100 || true
               exit 3
             fi
 
-            echo "=== SUCCESS ==="
-            date -u
-          EOF
-
-      # 9️⃣ Final success message
-      - name: Deployment summary
-        run: |
-          echo "[$(date -u)] ✅ Deployment finished successfully."
+            echo "=== [$(date -u)] DEPLOYMENT COMPLETE ==="
