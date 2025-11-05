@@ -1,58 +1,25 @@
-name: Deploy EHR Integration Bridge
+
+name: Deploy to Oracle VM
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.0
         with:
-          fetch-depth: 0
-
-      - name: Create private key file
-        run: |
-          echo "${{ secrets.VM_KEY }}" | awk '{gsub(/\\n/,"\n")}1' > private_key.pem
-          chmod 600 private_key.pem
-
-      - name: Test SSH handshake
-        run: |
-          ssh -i private_key.pem -o BatchMode=yes -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=10 -o UserKnownHostsFile=/dev/null \
-            ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo 'SSH OK'"
-
-      - name: Rsync project
-        run: |
-          rsync -avz --delete \
-            --exclude 'node_modules' \
-            -e "ssh -o StrictHostKeyChecking=no -i private_key.pem" \
-            ./ ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }}:/home/${{ secrets.VM_USER }}/EHR-Integration-Bridge/
-
-      - name: Remote deploy commands
-        run: |
-          ssh -i private_key.pem -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<EOF
-set -euxo pipefail
-PROJECT_DIR="/home/${{ secrets.VM_USER }}/EHR-Integration-Bridge"
-cd "$PROJECT_DIR"
-
-echo "Using docker compose..."
-docker compose down --remove-orphans || true
-docker compose up -d --build
-
-echo "Waiting 6s for services to start..."
-sleep 6
-
-if curl -s --fail http://localhost:8080/swagger/v1/swagger.json -o /tmp/swagger.json; then
-  echo "✅ Backend API reachable."
-else
-  echo "❌ Backend API not reachable — showing logs:"
-  docker compose ps
-  docker compose logs --tail=50
-  exit 3
-fi
-EOF
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_KEY }}
+          script: |
+            cd ~/EHR-Integration-Bridge
+            git pull origin main
+            sudo docker-compose down
+            sudo docker-compose up -d --build
