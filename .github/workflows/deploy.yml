@@ -3,50 +3,139 @@ name: Deploy EHR Integration Bridge
 on:
   push:
     branches:
-      - main  # Deploy on pushes to main branch
+      - main
 
 jobs:
   deploy:
+    name: Deploy to Oracle VM (with verbose debug)
     runs-on: ubuntu-latest
+    env:
+      ACTIONS_STEP_DEBUG: true
 
     steps:
-      # 1️⃣ Checkout your code
       - name: Checkout repository
-        uses: actions/checkout@v3
-
-      # 2️⃣ Setup SSH agent to connect to your Oracle VM
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.8.2
+        uses: actions/checkout@v4
         with:
-          ssh-private-key: ${{ secrets.EHR_SSH_KEY }}
+          fetch-depth: 0
 
-      # 3️⃣ Copy project files to the backend VM
-      - name: Sync project to VM
+      - name: Create private key file (preserve newlines, remove CR)
         run: |
+          echo "Creating private key file..."
+          # Write secret to file and strip CR characters (Windows -> Unix)
+          printf '%s' "${{ secrets.EHR_SSH_KEY }}" | tr -d '\r' > private_key.pem
+          chmod 600 private_key.pem
+          echo "Private key file created: $(ls -l private_key.pem)"
+          echo "Showing header / footer for verification (safe):"
+          head -n 3 private_key.pem || true
+          tail -n 3 private_key.pem || true
+
+      - name: Validate SSH key works locally (quick test)
+        run: |
+          echo "Testing local parsing of private key..."
+          if ssh-keygen -y -f private_key.pem > /dev/null 2>&1; then
+            echo "✅ Private key is a valid SSH private key."
+          else
+            echo "❌ Private key parsing failed."
+            exit 1
+          fi
+
+      - name: Check SSH port reachability from runner
+        run: |
+          echo "Checking TCP connect to ${{ secrets.EHR_HOST }}:22 (timeout 8s)..."
+          timeout 8 bash -c "cat < /dev/null > /dev/tcp/${{ secrets.EHR_HOST }}/22" \
+            && echo "✅ Port 22 reachable" \
+            || (echo "❌ Port 22 NOT reachable from runner — check security lists / IGW / VM public IP" && exit 2)
+
+      - name: Test SSH handshake (verbose)
+        run: |
+          echo "Attempting SSH handshake (verbose)…"
+          ssh -vvv -i private_key.pem -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no \
+            -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.EHR_HOST }} "echo 'SSH OK from runner'"
+
+      - name: Ensure remote project dir exists (create if missing)
+        run: |
+          echo "Ensuring remote project directory exists and ownership is ok..."
+          ssh -i private_key.pem -o StrictHostKeyChecking=no ubuntu@${{ secrets.EHR_HOST }} <<'SSH_EOF'
+            set -euxo pipefail
+            TARGET_DIR="/home/ubuntu/EHR-Integration-Bridge"
+            if [ ! -d "$TARGET_DIR" ]; then
+              echo "Remote dir missing -> creating $TARGET_DIR"
+              mkdir -p "$TARGET_DIR"
+              chown ubuntu:ubuntu "$TARGET_DIR"
+            else
+              echo "Remote dir exists: $TARGET_DIR"
+            fi
+            echo "Remote disk usage:"
+            df -h .
+            echo "Listing remote dir:"
+            ls -la "$TARGET_DIR"
+SSH_EOF
+
+      - name: Rsync project to VM (excludes node_modules & .git)
+        run: |
+          echo "Syncing repository to remote host with rsync..."
+          # Ensure rsync is installed on runner (ubuntu-latest has it by default)
           rsync -avz --delete \
             --exclude '.git' \
             --exclude 'node_modules' \
+            -e "ssh -o StrictHostKeyChecking=no -i private_key.pem -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10" \
             ./ ubuntu@${{ secrets.EHR_HOST }}:/home/ubuntu/EHR-Integration-Bridge/
+          echo "Rsync done."
 
-      # 4️⃣ Run deployment commands remotely
-      - name: Deploy on VM
+      - name: Remote deploy commands (with verification)
         run: |
-          ssh ubuntu@${{ secrets.EHR_HOST }} << 'EOF'
-            set -euo pipefail
+          echo "Running remote deployment commands (docker compose) with verbose output..."
+          ssh -i private_key.pem -o StrictHostKeyChecking=no ubuntu@${{ secrets.EHR_HOST }} <<'SSH_EOF'
+            set -euxo pipefail
+
             PROJECT_DIR="/home/ubuntu/EHR-Integration-Bridge"
-            cd "$PROJECT_DIR"
-            
-            echo "Stopping old containers..."
-            docker compose down || true
-            
-            echo "Building and starting containers..."
-            docker compose up -d --build
-            
-            echo "Verifying backend API..."
-            if curl -s --fail http://localhost:8080/swagger/v1/swagger.json > /dev/null; then
-              echo "✅ Backend API is up!"
-            else
-              echo "⚠️ Backend API check failed!"
-              exit 1
+            if [ ! -d "$PROJECT_DIR" ]; then
+              echo "ERROR: project dir not found: $PROJECT_DIR"
+              exit 2
             fi
-          EOF
+
+            cd "$PROJECT_DIR"
+
+            # Show git status for debugging
+            echo "GIT HEAD and latest commit:"
+            git rev-parse --short HEAD || true
+            git status --porcelain || true
+            git branch --show-current || true
+
+            # Make sure we use the right docker compose command
+            if docker compose version >/dev/null 2>&1; then
+              DOCKER_COMPOSE_CMD="docker compose"
+            else
+              DOCKER_COMPOSE_CMD="docker-compose"
+            fi
+            echo "Using: $DOCKER_COMPOSE_CMD"
+
+            echo "Stopping old containers (best-effort)..."
+            $DOCKER_COMPOSE_CMD down --remove-orphans || true
+
+            echo "Building and starting containers..."
+            $DOCKER_COMPOSE_CMD up -d --build
+
+            # Wait briefly for containers to initialise
+            echo "Waiting 6s for services to settle..."
+            sleep 6
+
+            # Verify API reachable locally
+            if curl -s --fail http://localhost:8080/swagger/v1/swagger.json -o /tmp/swagger.json; then
+              echo "✅ Backend API swagger reachable (local)."
+              echo "Swagger size: $(stat -c%s /tmp/swagger.json) bytes"
+            else
+              echo "❌ Backend API swagger NOT reachable (check container health / logs)."
+              echo "==== docker ps ===="
+              docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+              echo "==== recent logs (api container) ===="
+              docker-compose logs --tail=50 || true
+              exit 3
+            fi
+
+            echo "Deployment completed successfully on remote host."
+SSH_EOF
+
+      - name: Final success summary
+        run: |
+          echo "Deployment workflow finished."
