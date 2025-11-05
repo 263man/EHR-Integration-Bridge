@@ -7,22 +7,33 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Display VM_KEY secret (for debugging)
+      - name: Write private key to file
         run: |
-          echo "The VM_KEY secret length is: ${{ secrets.VM_KEY }}"
+          echo "${{ secrets.VM_KEY }}" > private_key.pem
+          chmod 600 private_key.pem
+
+      - name: Test SSH connection
+        run: |
+          ssh -i private_key.pem -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo 'SSH connection successful'"
 
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_KEY }}
+          key_path: private_key.pem
           script: |
+            set -e
             cd ~/EHR-Integration-Bridge
-            git pull origin main
+            echo "Pulling latest changes..."
+            git fetch origin main
+            git reset --hard origin/main
+            echo "Restarting Docker containers..."
             sudo docker-compose down
             sudo docker-compose up -d --build
+            echo "Deployment complete."
