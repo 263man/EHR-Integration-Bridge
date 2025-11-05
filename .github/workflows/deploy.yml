@@ -1,25 +1,51 @@
-
-name: Deploy to Oracle VM
+name: Deploy EHR Integration Bridge (Full Debug)
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main
 
 jobs:
   deploy:
+    name: Deploy to Oracle VM (deep debug)
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
 
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.0.0
+    steps:
+      # 1️⃣ Checkout repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_KEY }}
-          script: |
-            cd ~/EHR-Integration-Bridge
-            git pull origin main
-            sudo docker-compose down
-            sudo docker-compose up -d --build
+          fetch-depth: 0
+
+      # 2️⃣ Write private key file (preserve newlines, remove CR)
+      - name: Prepare SSH private key
+        run: |
+          echo "[$(date -u)] Creating private key file..."
+          echo "${{ secrets.VM_KEY }}" | awk '{gsub(/\\n/,"\n")}1' > private_key.pem
+          chmod 600 private_key.pem
+          echo "[$(date -u)] ✅ Private key created and permissions set."
+          echo "-----BEGIN HEADER SAMPLE-----"
+          head -n 2 private_key.pem || true
+          echo "-----END FOOTER SAMPLE-----"
+          tail -n 2 private_key.pem || true
+
+      # 3️⃣ Validate SSH key syntax
+      - name: Validate SSH key syntax
+        run: |
+          echo "[$(date -u)] Validating SSH key format..."
+          ssh-keygen -y -f private_key.pem > /dev/null && echo "✅ SSH key is valid." || (echo "❌ Invalid key format" && exit 1)
+
+      # 4️⃣ Check port 22 reachability
+      - name: Check SSH port reachability
+        run: |
+          echo "[$(date -u)] Checking SSH reachability to ${{ secrets.VM_HOST }}:22 ..."
+          timeout 8 bash -c "cat < /dev/null > /dev/tcp/${{ secrets.VM_HOST }}/22" \
+            && echo "✅ Port 22 reachable" \
+            || (echo "❌ Port 22 not reachable. Check Oracle security lists or ingress rules." && exit 2)
+
+      # 5️⃣ Test SSH handshake (verbose)
+      - name: Test SSH handshake (verbose)
+        run: |
+          echo "[$(date -u)] Attempting SSH connection test..."
+          ssh -vvv -i private_key.pem \
+            -o
