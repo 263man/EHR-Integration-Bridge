@@ -18,20 +18,18 @@ jobs:
       - name: Build frontend
         working-directory: ./ehr-bridge-frontend
         run: |
-          echo "[$(date -u)] Starting frontend build..."
+          echo "[$(date -u)] Building frontend..."
           npm ci
           npm run build
           echo "[$(date -u)] Build complete."
 
-      - name: Deploy via SFTP to Plesk
-        uses: wlixcc/SFTP-Deploy-Action@v1.2.4
+      - name: Deploy via FTP to Plesk
+        uses: SamKirkland/FTP-Deploy-Action@4.4.0
         with:
           server: ${{ secrets.PLESK_HOST }}
           username: ${{ secrets.PLESK_USER }}
           password: ${{ secrets.PLESK_PWD }}
-          port: 22
-          local_path: ./ehr-bridge-frontend/dist/
-          remote_path: ${{ secrets.PLESK_DEPLOY_PATH }}
-          delete_remote_files: false
-          sftp_only: true
-          dry_run: false
+          port: ${{ secrets.PLESK_PORT }}
+          local-dir: ./ehr-bridge-frontend/dist/
+          server-dir: /ehrbridge.kepekepe.com/
+          passive: true
