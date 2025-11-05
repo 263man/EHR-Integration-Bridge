@@ -48,7 +48,7 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key_path: private_key.pem
           port: 22
-          timeout: 60
+          timeout: 60s            # ✅ FIXED (must include unit)
           script_stop: true
           debug: true
           script: |
