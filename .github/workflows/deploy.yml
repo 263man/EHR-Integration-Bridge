@@ -35,9 +35,9 @@ jobs:
 
       - name: Remote deploy commands
         run: |
-          ssh -i private_key.pem -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<'EOF'
+          ssh -i private_key.pem -o StrictHostKeyChecking=no ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} <<EOF
 set -euxo pipefail
-PROJECT_DIR="/home/${USER}/EHR-Integration-Bridge"
+PROJECT_DIR="/home/${{ secrets.VM_USER }}/EHR-Integration-Bridge"
 cd "$PROJECT_DIR"
 
 echo "Using docker compose..."
