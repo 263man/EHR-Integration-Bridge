@@ -1,82 +1,52 @@
-name: Deploy to Oracle VM
+name: Deploy EHR Integration Bridge
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main  # Deploy on pushes to main branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      ACTIONS_STEP_DEBUG: true  # enable debug logs for Actions
 
     steps:
-      # 1️⃣ Checkout repository
-      - name: Checkout code
-        uses: actions/checkout@v4
+      # 1️⃣ Checkout your code
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      # 2️⃣ Write private key to file (preserve newlines, remove CR)
-      - name: Write private key to file
-        run: |
-          echo "Creating private key file..."
-          echo "${{ secrets.VM_KEY }}" | tr -d '\r' > private_key.pem
-          chmod 600 private_key.pem
-          ls -l private_key.pem
-          head -n 3 private_key.pem
-          tail -n 3 private_key.pem
-
-      # 3️⃣ Verify SSH port 22 is reachable
-      - name: Check SSH port reachability
-        run: |
-          echo "Checking SSH reachability on ${{ secrets.VM_HOST }}:22"
-          timeout 5 bash -c "cat < /dev/null > /dev/tcp/${{ secrets.VM_HOST }}/22" \
-            && echo "✅ Port 22 reachable" \
-            || echo "❌ Port 22 not reachable (network/firewall issue)"
-
-      # 4️⃣ Test SSH connection with maximum verbosity
-      - name: Test SSH connection
-        run: |
-          echo "Testing SSH connection..."
-          ssh -vvv -i private_key.pem -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-          ${{ secrets.VM_USER }}@${{ secrets.VM_HOST }} "echo '✅ SSH connection successful'"
-
-      # 5️⃣ Deploy via appleboy/ssh-action
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.0.0
+      # 2️⃣ Setup SSH agent to connect to your Oracle VM
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.8.1
         with:
-          host: ${{ secrets.VM_HOST }}
-          username: ${{ secrets.VM_USER }}
-          key_path: private_key.pem
-          port: 22
-          timeout: 120s
-          script_stop: true
-          debug: true
-          script: |
-            set -ex
-            echo "✅ SSH user: $(whoami)"
-            echo "✅ Home directory: $HOME"
-            echo "Current directory: $(pwd)"
-            echo "Listing files in current directory:"
-            ls -la
+          ssh-private-key: ${{ secrets.EHR_SSH_KEY }}
 
-            # Change to project directory using dynamic home
-            PROJECT_DIR="$HOME/EHR-Integration-Bridge"
-            if [ ! -d "$PROJECT_DIR" ]; then
-              echo "❌ Project directory $PROJECT_DIR does not exist!"
-              exit 1
-            fi
+      # 3️⃣ Copy project files to the backend VM
+      - name: Sync project to VM
+        run: |
+          rsync -avz --delete \
+            --exclude '.git' \
+            --exclude 'node_modules' \
+            ./ ubuntu@${{ secrets.EHR_HOST }}:/home/ubuntu/EHR-Integration-Bridge/
+
+      # 4️⃣ Run deployment commands remotely
+      - name: Deploy on VM
+        run: |
+          ssh ubuntu@${{ secrets.EHR_HOST }} << 'EOF'
+            set -euo pipefail
+            PROJECT_DIR="/home/ubuntu/EHR-Integration-Bridge"
             cd "$PROJECT_DIR"
-
-            echo "Pulling latest changes..."
-            git fetch origin main
-            git reset --hard origin/main
-
-            echo "Restarting Docker containers..."
-            if [ -f docker-compose.yml ]; then
-              sudo docker-compose down
-              sudo docker-compose up -d --build
-              echo "✅ Deployment complete."
+            
+            echo "Stopping old containers..."
+            docker compose down || true
+            
+            echo "Building and starting containers..."
+            docker compose up -d --build
+            
+            echo "Verifying backend API..."
+            if curl -s --fail http://localhost:8080/swagger/v1/swagger.json > /dev/null; then
+              echo "✅ Backend API is up!"
             else
-              echo "❌ docker-compose.yml not found in $PROJECT_DIR"
+              echo "⚠️ Backend API check failed!"
               exit 1
             fi
+          EOF
