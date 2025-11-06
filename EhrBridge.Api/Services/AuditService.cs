@@ -1,7 +1,7 @@
+// /workspaces/EHR-Integration-Bridge/EhrBridge.Api/Services/AuditService.cs
 using System.Data;
 using MySql.Data.MySqlClient;
 using EhrBridge.Api.Data;
-using EhrBridge.Api.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -56,9 +56,10 @@ namespace EhrBridge.Api.Services
             return Convert.ToInt32(result ?? 0);
         }
 
-        private async Task<List<IncompleteRecord>> GetIncompleteDemographicsAsync()
+        // FIX (CS0246): Change the return type and internal List type from 'IncompleteRecord' to 'IncompleteRecordDto'
+        private async Task<List<IncompleteRecordDto>> GetIncompleteDemographicsAsync()
         {
-            var incompleteRecords = new List<IncompleteRecord>();
+            var incompleteRecords = new List<IncompleteRecordDto>();
 
             await using var connection = new MySqlConnection(_connectionString);
             await connection.OpenAsync();
@@ -89,7 +90,8 @@ namespace EhrBridge.Api.Services
 
                 if (missingFields.Count > 0)
                 {
-                    incompleteRecords.Add(new IncompleteRecord
+                    // FIX (CS0246): Change instantiation from 'IncompleteRecord' to 'IncompleteRecordDto'
+                    incompleteRecords.Add(new IncompleteRecordDto
                     {
                         PatientId = pid,
                         Field = string.Join(", ", missingFields),

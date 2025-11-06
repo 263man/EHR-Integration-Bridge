@@ -13,5 +13,6 @@ public class IncompleteRecordDto
     // A flag to clearly state why the record failed the audit.
     public string MissingDataFlag { get; set; } = string.Empty;
     public string Field { get; internal set; }  = string.Empty;
-    public string Description { get; internal set; }  = string.Empty;
+    public string Description { get; internal set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
 }

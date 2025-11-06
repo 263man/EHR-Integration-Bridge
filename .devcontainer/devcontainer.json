@@ -1,0 +1,22 @@
+{
+  "name": "EHR Dev Env",
+  "build": {
+    "context": ".",
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    // ✅ Docker if you need it
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "moby": false
+    },
+    // ✅ Node.js v20 for Vite
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20.19"
+    },
+    // ✅ Optional: .NET SDK
+    "ghcr.io/devcontainers/features/dotnet:1": {
+      "version": "8.0",
+      "sdk": true
+    }
+  }
+}

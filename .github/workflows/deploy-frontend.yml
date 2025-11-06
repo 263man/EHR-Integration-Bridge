@@ -1,0 +1,35 @@
+name: Deploy Frontend to Plesk (InterServer)
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'ehr-bridge-frontend/**'
+      - '.github/workflows/deploy-frontend.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build frontend
+        working-directory: ./ehr-bridge-frontend
+        run: |
+          echo "[$(date -u)] Building frontend..."
+          npm ci
+          npm run build
+          echo "[$(date -u)] Build complete."
+
+      - name: Deploy via FTP to Plesk
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.PLESK_HOST }}
+          username: ${{ secrets.PLESK_USER }}
+          password: ${{ secrets.PLESK_PWD }}
+          port: 21
+          local-dir: ./ehr-bridge-frontend/dist/
+          server-dir: /ehrbridge.kepekepe.com/
+          passive: true

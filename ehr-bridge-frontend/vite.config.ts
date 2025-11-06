@@ -1,3 +1,4 @@
+// /workspaces/EHR-Integration-Bridge/ehr-bridge-frontend/vite.config.ts
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -6,11 +7,18 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    allowedHosts: ['.gitpod.dev', '.github.dev', '.codespaces.app'],
     proxy: {
       '/api': {
         target: 'http://localhost:8080', // ehrbridge_api in Docker
         changeOrigin: true,
         rewrite: (path) => path, // keep /api/audit as-is
+      },
+      // FIX: Add proxy rule for the export endpoints
+      '/export': {
+        target: 'http://localhost:8080', // ehrbridge_api in Docker
+        changeOrigin: true,
+        rewrite: (path) => path, // keep /export/all as-is
       },
     },
   },

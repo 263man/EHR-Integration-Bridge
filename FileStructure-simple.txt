@@ -1,10 +1,16 @@
 ./
-├── .gitignore
+├── .devcontainer/
+│   ├── devcontainer.json
+│   └── Dockerfile
+├── docker-compose.yml
 ├── Dockerfile
 ├── EhrBridge.Api/
+│   ├── appsettings.Development.json
+│   ├── appsettings.json
 │   ├── Controllers/
 │   │   ├── AuditController.cs
-│   │   └── ControlController.cs
+│   │   ├── ControlController.cs
+│   │   └── ExportController.cs
 │   ├── Data/
 │   │   ├── AuditResultDto.cs
 │   │   └── IncompleteRecordDto.cs
@@ -14,29 +20,27 @@
 │   │   └── PatientDataGenerator.cs
 │   ├── EhrBridge.Api.csproj
 │   ├── EhrBridge.Api.http
-│   ├── Models/
-│   │   └── IncompleteRecord.cs
 │   ├── Program.cs
 │   ├── Properties/
 │   │   └── launchSettings.json
 │   ├── Services/
 │   │   ├── AuditService.cs
 │   │   ├── ControlService.cs
+│   │   ├── ExportService.cs
 │   │   ├── IAuditService.cs
-│   │   └── IControlService.cs
-│   ├── appsettings.Development.json
-│   └── appsettings.json
-├── EhrIntegrationBridge.sln
-├── Hapi_Fhir_Patient_Export.csv
-├── docker-compose.yml
+│   │   ├── IControlService.cs
+│   │   └── IExportService.cs
+│   └── Utils/
+│       ├── CsvExportUtility.cs
+│       └── FileCallbackResult.cs
 ├── ehr-bridge-frontend/
-│   ├── .gitignore
-│   ├── README.md
 │   ├── eslint.config.js
+│   ├── .gitignore
 │   ├── index.html
-│   ├── package-lock.json
 │   ├── package.json
+│   ├── package-lock.json
 │   ├── public/
+│   ├── README.md
 │   ├── src/
 │   │   ├── App.css
 │   │   ├── App.tsx
@@ -49,10 +53,17 @@
 │   ├── tsconfig.json
 │   ├── tsconfig.node.json
 │   └── vite.config.ts
+├── EhrIntegrationBridge.sln
 ├── fhir-evidence/
 │   ├── FhirEvidenceGenerator.csproj
 │   ├── FhirPatientRecord.cs
 │   └── Program.cs
-└── output/
-    ├── Full_Patient_Export.csv
-    └── Incomplete_Demographics_Audit_List.csv
+├── .gitignore
+├── .gitpod.yml
+├── Hapi_Fhir_Patient_Export.csv
+├── output/
+│   ├── Full_Patient_Export.csv
+│   └── Incomplete_Demographics_Audit_List.csv
+└── .vscode/
+    ├── launch.json
+    └── tasks.json

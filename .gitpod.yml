@@ -1,0 +1,23 @@
+# .gitpod.yml
+image:
+  file: .devcontainer/Dockerfile
+
+tasks:
+  - init: npm install --prefix ehr-bridge-frontend
+    command: npm run --prefix ehr-bridge-frontend dev
+
+ports:
+  - port: 5173
+    onOpen: open-preview
+    description: Vite Dev Server
+
+  - port: 5000
+    onOpen: ignore
+    description: .NET Backend
+
+vscode:
+  extensions:
+    - ms-dotnettools.csharp
+    - esbenp.prettier-vscode
+    - dbaeumer.vscode-eslint
+    - eamodio.gitlens
