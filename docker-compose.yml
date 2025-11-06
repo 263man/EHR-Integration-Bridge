@@ -32,6 +32,8 @@ services:
       MYSQL_USER: openemr
       MYSQL_PASS: openemrpass
       MYSQL_DATABASE: openemr
+      OE_SITE_DIR: default
+      OE_BASE_URL: /openemr
     ports:
       - "8081:80"
     volumes:
