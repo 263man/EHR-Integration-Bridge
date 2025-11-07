@@ -33,6 +33,10 @@ services:
       MYSQL_PASS: openemrpass
       MYSQL_DATABASE: openemr
       OE_SITE_DIR: default
+      # ⚠️ IMPORTANT: Do NOT change this to empty string or remove it
+      # This must match the external URL path (/openemr)
+      # Caddy strips this prefix before forwarding to Apache
+      # See docs/DEPLOYMENT.md for details
       OE_BASE_URL: /openemr
     ports:
       - "8081:80"

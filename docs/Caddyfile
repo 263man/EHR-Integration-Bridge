@@ -1,0 +1,44 @@
+# Caddyfile for proxy-vm
+# Location on server: /etc/caddy/Caddyfile
+# 
+# This file is for DOCUMENTATION ONLY - it is NOT automatically deployed.
+# To apply changes:
+#   1. SSH to proxy-vm
+#   2. Edit: sudo nano /etc/caddy/Caddyfile
+#   3. Validate: sudo caddy validate --config /etc/caddy/Caddyfile
+#   4. Reload: sudo systemctl reload caddy
+
+ehrbridge.kepekepe.com, ehrbridgeapi.kepekepe.com {
+    tls fckepekepe@gmail.com
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    }
+
+    # Forward all API traffic to .NET backend (EhrBridge API)
+    handle /api/* {
+        reverse_proxy 10.0.0.224:8080
+    }
+
+    # Forward OpenEMR static assets (preserve path - no stripping)
+    # OpenEMR 7.x generates these URLs without the /openemr prefix
+    handle /public/* {
+        reverse_proxy 10.0.0.224:8081
+    }
+
+    handle /assets/* {
+        reverse_proxy 10.0.0.224:8081
+    }
+
+    # Forward OpenEMR application traffic (STRIP /openemr prefix)
+    # Apache DocumentRoot is /var/www/localhost/htdocs/openemr
+    # So it expects paths like /interface/... not /openemr/interface/...
+    handle_path /openemr/* {
+        reverse_proxy 10.0.0.224:8081
+    }
+
+    # Default response
+    handle {
+        respond "EHR Integration Proxy is alive" 200
+    }
+}
